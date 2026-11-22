@@ -12,6 +12,9 @@
 #       --branch BRANCH    worktree branch (default: wt/NAME)
 #       --base REF         worktree start point (default: HEAD of the orchestrator's checkout)
 #       --profile P        company | personal (default: the orchestrator's)
+#       --model M          Claude model: an alias (haiku, sonnet, opus, fable) or a full name
+#                          (default: the profile's configured model)
+#       --effort E         low | medium | high | xhigh | max (default: the model's default)
 #   hc-worker list                 this orchestrator's workers, status, branch, commits ahead
 #   hc-worker stop NAME [--force]  end it; remove its worktree if clean (--force: even if not),
 #                                  delete its branch only if already merged into HEAD
@@ -74,7 +77,7 @@ repo_root() {  # the main checkout, even when called from inside a worktree
 }
 
 start() {
-  local name="" fork=0 worktree=1 branch="" base="" profile="" task="" place=split
+  local name="" fork=0 worktree=1 branch="" base="" profile="" task="" place=split model="" effort=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --name) name="$2"; shift 2 ;;
@@ -84,6 +87,8 @@ start() {
       --branch) branch="$2"; shift 2 ;;
       --base) base="$2"; shift 2 ;;
       --profile) profile="$2"; shift 2 ;;
+      --model) model="$2"; shift 2 ;;
+      --effort) effort="$2"; shift 2 ;;
       --) shift; task="$*"; break ;;
       *) die "unknown option $1" ;;
     esac
@@ -97,14 +102,19 @@ start() {
   profile="${profile:-$(mylabel herdr.profile)}"; profile="${profile:-company}"
   [ -n "$space" ] || die "this terminal isn't in a Herdr space"
 
+  case "$effort" in ""|low|medium|high|xhigh|max) ;; *) die "--effort: low, medium, high, xhigh or max" ;; esac
+  [[ "$model" =~ ^[A-Za-z0-9._-]*$ ]] || die "--model: an alias (haiku, sonnet, opus, fable) or a model name"
   local claude_args=()
+  [ -n "$model" ] && claude_args+=(--model "$model")
+  [ -n "$effort" ] && claude_args+=(--effort "$effort")
   if [ "$fork" = 1 ]; then
     [ -n "$session" ] || die "--fork: this Claude session has no herdr.claude-session label (restart it once so the hook records it)"
-    claude_args=(--resume "$session" --fork-session)
+    claude_args+=(--resume "$session" --fork-session)
   fi
 
   dir="$PWD"
-  local labels=(--label "hc-worker.parent=$me" --label "hc-worker.place=$place")
+  local labels=(--label "hc-worker.parent=$me" --label "hc-worker.place=$place"
+    --label "hc-worker.model=${model:-default}" --label "hc-worker.effort=${effort:-default}")
   # A new tab: label it with this space and a tab id Herdr doesn't know yet. A split: no Herdr
   # labels; place_split gives it a pane once it runs.
   [ "$place" = tab ] && labels+=(--label "herdr.space=$space" --label "herdr.tab=tb$(openssl rand -hex 16)")
@@ -156,7 +166,8 @@ Other workers: hc-worker list shows them. Message one directly (hc send <name> \
 Do not start other hc agents or workers. Claude's built-in subagents are fine within your scope." >/dev/null
 
   jq -n --arg n "$name" --arg d "$dir" --arg b "$branch" --arg s "$sha" --arg p "$profile" --argjson f "$fork" --arg pl "$place" \
-    '{name:$n, started:true, task_sent:true, place:$pl, folder:$d, branch:(if $b=="" then null else $b end),
+    --arg m "${model:-default}" --arg e "${effort:-default}" \
+    '{name:$n, started:true, task_sent:true, place:$pl, model:$m, effort:$e, folder:$d, branch:(if $b=="" then null else $b end),
       base:(if $s=="" then null else $s end), profile:$p, forked:($f==1)}'
 }
 
@@ -171,7 +182,8 @@ list() {
     br=$(jq -r '.labels["hc-worker.branch"] // empty' <<<"$j")
     base=$(jq -r '.labels["hc-worker.base"] // empty' <<<"$j")
     [ -n "$br" ] && [ -n "$base" ] && ahead=$(git -C "$wt" rev-list --count "$base..$br" 2>/dev/null || echo "?")
-    jq -c --arg ahead "$ahead" '{name, address, status: (.status.state // .state), branch: .labels["hc-worker.branch"],
+    jq -c --arg ahead "$ahead" '{name, address, status: (.status.state // .state), model: .labels["hc-worker.model"],
+      effort: .labels["hc-worker.effort"], branch: .labels["hc-worker.branch"],
       commits: (if $ahead=="" then null else $ahead end), folder: (.labels["hc-worker.worktree"] // .cwd)}' <<<"$j"
   done
   [ "$any" = 1 ] || echo "no workers"

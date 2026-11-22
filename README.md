@@ -53,7 +53,8 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
   email; Herdr's sidebar and tab bar show a coloured badge for every space and tab running Claude
   (layout `main-profile`).
 - **`hc-parallel-dev` skill**: "split this into workers" → plan, workers as splits beside the
-  orchestrator (or tabs) in git worktrees (`hc-worker start`), coordination with `hc send` / `hc wait`, review, merge, cleanup
+  orchestrator (or tabs) in git worktrees, each on a model and effort the orchestrator picks from
+  the task's complexity (`haiku`/`sonnet`/`opus`, `hc-worker start --model … --effort …`) (`hc-worker start`), coordination with `hc send` / `hc wait`, review, merge, cleanup
   (`hc-worker stop`, `hc-worker prune`).
 - **`CLAUDE.md` block**: every session knows it runs in Herdr and about these commands.
 - **Permissions**: `hc`, `herdr-app`, `hc-worker`, `claude-ws` run without prompts; `hc keys`

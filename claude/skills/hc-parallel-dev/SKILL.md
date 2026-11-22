@@ -1,6 +1,6 @@
 ---
 name: hc-parallel-dev
-description: Real parallel development with independent Claude workers in Herdr split panes beside you, coordinated through herdr-core (hc). Each implementing worker gets its own git worktree; workers can start fresh or as a fork of this conversation; all coordination uses hc send / hc wait / hc read / hc interrupt. Use when the user asks to split work across agents, run tasks in parallel, "spin up workers", fan out implementation, delegate to workers in splits or tabs, or fork this conversation into workers. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
+description: Real parallel development with independent Claude workers in Herdr split panes beside you, coordinated through herdr-core (hc). The orchestrator picks each worker's model and effort (haiku / sonnet / opus) from the task's complexity. Each implementing worker gets its own git worktree; workers can start fresh or as a fork of this conversation; all coordination uses hc send / hc wait / hc read / hc interrupt. Use when the user asks to split work across agents, run tasks in parallel, "spin up workers", fan out implementation, delegate to workers in splits or tabs, or fork this conversation into workers. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
 ---
 
 # Parallel development with hc workers
@@ -40,9 +40,40 @@ Split the work into parts that can be built **independently**:
 - Shared interfaces (types, API shapes, function signatures) are decided **before** starting,
   and written into every affected worker's task.
 - 2 to 4 workers is usually right. More workers means more integration, not more speed.
+- Each worker gets a **model and effort chosen for its task** (next section). Always pass both
+  explicitly; never leave a worker on the default.
 
-Show the person the plan: worker names (short, `a-z0-9-`), each scope, fresh or `--fork`,
-the branches (`wt/<name>`), and that workers will **commit on their own branches** and you
+### Choosing each worker's model
+
+Judge the task, not the project. The deciding questions: how much must the worker figure out
+for itself, and how costly is a subtle mistake?
+
+| Tier | `--model` / `--effort` | For tasks that are |
+|---|---|---|
+| Light | `haiku` / `low` | Fully specified and mechanical: boilerplate from a given pattern, renames, moving code, formatting, simple tests for existing code, docs/comments, small config changes, read-only lookups and summaries |
+| Standard | `sonnet` / `medium` | Ordinary implementation with a clear spec: a feature or fix in one area, a component or endpoint following existing patterns, tests with some thought in them, straightforward refactors |
+| Complex | `opus` / `high` | Ambiguity or real judgment: design decisions, cross-cutting changes, unclear root-cause debugging, concurrency, security, data migrations, performance work, anything where a plausible-but-wrong change is expensive |
+
+- Move **up a tier** when: the spec leaves gaps the worker must fill, the code area is unfamiliar
+  or tangled, failures would be silent (data, auth, money), or the worker is a `--fork` that must
+  reason over a long conversation. Use `opus` / `xhigh` (or `max`) only for the hardest single
+  problem in the plan, and say why.
+- Move **down a tier** when: you can write the change down almost line by line in the task, or
+  the worker only reads (review checklists, inventory, summaries).
+- Reviewers: `sonnet` / `medium` for routine diffs, `opus` / `high` for risky ones.
+- Other models (for example `fable`, or a full model name) only when the person asks for them.
+- If the person names a model or a budget ("keep it cheap", "use opus for everything"), that
+  overrides this table.
+
+Escalate rather than guess: if a worker reports `blocked` on something a stronger model would
+reason through, or its work fails review twice for reasoning (not scope) reasons, tell the person
+and either `hc send` it narrower instructions or replace it one tier up: ask it to commit what it
+has, `hc-worker stop <name>` (its unmerged branch is kept), then start a successor under a new name
+on top of that work, e.g. `hc-worker start --name api-2 --base wt/api --model opus --effort high -- "..."`.
+Never switch models silently.
+
+Show the person the plan: worker names (short, `a-z0-9-`), each scope, **model and effort with a
+one-line reason**, fresh or `--fork`, the branches (`wt/<name>`), and that workers will **commit on their own branches** and you
 will merge them into the current branch only after their review. Wait for their go-ahead.
 
 ## 2. Start the workers
@@ -50,8 +81,9 @@ will merge them into the current branch only after their review. Wait for their 
 Run from the repo (your own terminal), one call per worker:
 
 ```sh
-hc-worker start --name api -- "Implement ... Scope: only src/api/** and its tests. Interface: ... Done when: tests in src/api pass."
-hc-worker start --name ui --fork -- "From the plan we agreed, build the UI part. Scope: only frontend/src/filing/**. Done when: ..."
+hc-worker start --name api --model sonnet --effort medium -- "Implement ... Scope: only src/api/** and its tests. Interface: ... Done when: tests in src/api pass."
+hc-worker start --name ui --fork --model opus --effort high -- "From the plan we agreed, build the UI part. Scope: only frontend/src/filing/**. Done when: ..."
+hc-worker start --name docs --model haiku --effort low -- "Add the new endpoint to docs/api.md following the existing entries. Scope: only docs/api.md."
 ```
 
 - The task you write is the worker's whole brief: goal, scope (files it may touch), agreed
@@ -61,6 +93,7 @@ hc-worker start --name ui --fork -- "From the plan we agreed, build the UI part.
   (permissions, login, trust). **Never answer a worker's dialogs yourself** (no `hc keys`,
   no `--force` sends): tell the person which pane needs them, then `hc send <name> "<task>"`
   once they've dealt with it (`hc read <name>` first to check).
+- `--model` and `--effort` as chosen in the plan (required by this skill, see above).
 - Options: `--tab` (own tab instead of a split), `--profile company|personal` (default: yours), `--base REF` (default: `HEAD`),
   `--branch NAME` (default: `wt/<name>`).
 
@@ -79,7 +112,7 @@ hc wait --children any      # wakes on the next report or a worker going idle/bl
 
 - Reports arrive as your next input, tagged: `<hc from="t1g api">api: done; details: ...</hc>`.
   Process each, then wait again. `reason: timeout` is a check-in, not a failure: wait again.
-- `hc-worker list` shows every worker: status, branch, commits ahead.
+- `hc-worker list` shows every worker: status, model, effort, branch, commits ahead.
 - `hc read <name> --lines 60` to see what a worker is doing without disturbing it.
 - Answer questions and redirect with `hc send <name> "..."`. Use `hc interrupt <name>` only to
   stop a worker going the wrong way, then send the correction.
@@ -119,7 +152,8 @@ hc-worker stop <name>          # ends it, removes its worktree if clean, deletes
 
 ## 6. Report to the person
 
-Short summary: what each worker did (branch, commits), what was merged, checks run and their
+Short summary: what each worker did (branch, commits, the model and effort it ran on, and any
+escalation), what was merged, checks run and their
 results, anything left (unmerged branches, open questions, workers still running).
 
 ## Reference
