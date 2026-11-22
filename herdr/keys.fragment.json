@@ -1,0 +1,49 @@
+{
+  "global": {
+    "cmd-shift-n": "mod.open:claude-space",
+    "cmd-shift-right": {
+      "command": "pane.split",
+      "args": {
+        "direction": "right",
+        "argv": [
+          "__HOME__/.local/bin/claude-ws"
+        ]
+      }
+    },
+    "cmd-shift-down": {
+      "command": "pane.split",
+      "args": {
+        "direction": "down",
+        "argv": [
+          "__HOME__/.local/bin/claude-ws"
+        ]
+      }
+    },
+    "cmd-shift-left": {
+      "command": "pane.split",
+      "args": {
+        "direction": "right",
+        "argv": [
+          "__HOME__/.local/bin/claude-ws",
+          "left"
+        ]
+      }
+    },
+    "cmd-shift-up": {
+      "command": "pane.split",
+      "args": {
+        "direction": "down",
+        "argv": [
+          "__HOME__/.local/bin/claude-ws",
+          "up"
+        ]
+      }
+    },
+    "cmd-shift-t": "mod.open:claude-fork",
+    "cmd-ctrl-left": "mod.open:claude-fork-left",
+    "cmd-ctrl-right": "mod.open:claude-fork-right",
+    "cmd-ctrl-up": "mod.open:claude-fork-up",
+    "cmd-ctrl-down": "mod.open:claude-fork-down",
+    "cmd-shift-h": "mod.open:help-plus"
+  }
+}

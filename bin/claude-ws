@@ -1,0 +1,54 @@
+#!/bin/bash
+# Starts Claude in this Herdr pane with the Claude profile its workspace already uses.
+#   claude-ws [left|up] [--profile company|personal] [-- <claude args>...]
+#     left|up    also move this pane to that side of the pane it split from
+#     --profile  use this profile instead of detecting it
+#     -- ...     passed to claude (the fork keys pass --resume <id> --fork-session)
+# Run by the cmd-shift-<arrow> keys and the claude-fork-<dir> mods (~/.config/herdr-app).
+# Detection uses the herdr.profile labels the Claude hook (~/.claude/herdr-profile-label.sh)
+# sets: a Claude session in this tab first, else anywhere in this space, else company.
+
+me="$HC_TERMINAL_ID"
+move="" profile=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    left|up|right|down) move="$1"; shift ;;
+    --profile) profile="$2"; shift 2 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+
+label() { hc get "$1" --json 2>/dev/null | jq -r --arg k "$2" '.labels[$k] // empty'; }
+
+if [ -z "$profile" ] && [ -n "$me" ]; then
+  space=$(label "$me" herdr.space)
+  tab=$(label "$me" herdr.tab)
+  tab_profile="" space_profile=""
+  for t in $(hc ls --json 2>/dev/null | jq -r '.terminals[] | select(.state == "live") | .address'); do
+    [ "$t" = "$me" ] && continue
+    labels=$(hc get "$t" --json 2>/dev/null | jq -c '.labels // {}')
+    p=$(jq -r '.["herdr.profile"] // empty' <<<"$labels")
+    [ -n "$p" ] || continue
+    [ "$(jq -r '.["herdr.space"] // empty' <<<"$labels")" = "$space" ] || continue
+    [ -z "$space_profile" ] && space_profile="$p"
+    [ "$(jq -r '.["herdr.tab"] // empty' <<<"$labels")" = "$tab" ] && [ -z "$tab_profile" ] && tab_profile="$p"
+  done
+  profile="${tab_profile:-$space_profile}"
+fi
+profile="${profile:-company}"
+
+# pane.split only goes right or down: for left/up, swap this new pane with the one it came from.
+if [ -n "$me" ] && { [ "$move" = "left" ] || [ "$move" = "up" ]; }; then
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    pane=$(herdr-app ls 2>/dev/null | jq -r --arg t "$me" '[.. | objects | select(.terminal? == $t) | .pane] | first // empty')
+    [ -n "$pane" ] && break
+    sleep 0.1
+  done
+  [ -n "$pane" ] && herdr-app do pane.swap --pane "$pane" --direction "$move" >/dev/null 2>&1
+fi
+
+if [ "$profile" = "personal" ]; then
+  export CLAUDE_CONFIG_DIR="$HOME/.claude-personal"
+fi
+exec claude "$@"

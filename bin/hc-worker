@@ -1,0 +1,210 @@
+#!/bin/bash
+# hc-worker: start, list and stop parallel Claude workers, each in its own Herdr subtab and
+# (by default) its own git worktree. Used by the hc-parallel-dev skill; run it from inside
+# the orchestrating Claude's terminal ($HC_TERMINAL_ID is the orchestrator).
+#
+#   hc-worker start --name NAME [options] -- "task"
+#       --fork             fork the orchestrator's conversation (worker knows everything said so far)
+#       --no-worktree      work in the orchestrator's folder (read-only workers: reviewers, research)
+#       --branch BRANCH    worktree branch (default: wt/NAME)
+#       --base REF         worktree start point (default: HEAD of the orchestrator's checkout)
+#       --profile P        company | personal (default: the orchestrator's)
+#   hc-worker list                 this orchestrator's workers, status, branch, commits ahead
+#   hc-worker stop NAME [--force]  end it; remove its worktree if clean (--force: even if not),
+#                                  delete its branch only if already merged into HEAD
+#   hc-worker prune [--dry-run]    leftovers from ended or crashed runs: wt/* worktrees in
+#                                  <repo>/.claude/worktrees with no live worker, and wt/* branches.
+#                                  Removes the clean, merged ones; reports the rest, never deletes
+#                                  uncommitted or unmerged work. Touches nothing outside wt/*.
+#
+# Worktrees go in <repo>/.claude/worktrees/NAME: inside the already-trusted repo, so Claude
+# starts there without a folder-trust prompt. (claude --worktree is not used: it always
+# starts from origin's default branch, not from the branch being worked on.)
+set -euo pipefail
+
+die() { echo "hc-worker: $*" >&2; exit 1; }
+me="${HC_TERMINAL_ID:-}"
+[ -n "$me" ] || die "not inside an hc terminal (HC_TERMINAL_ID is unset)"
+mylabel() { hc get "$me" --json | jq -r --arg k "$1" '.labels[$k] // empty'; }
+
+repo_root() {  # the main checkout, even when called from inside a worktree
+  local common; common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  dirname "$common"
+}
+
+start() {
+  local name="" fork=0 worktree=1 branch="" base="" profile="" task=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --name) name="$2"; shift 2 ;;
+      --fork) fork=1; shift ;;
+      --no-worktree) worktree=0; shift ;;
+      --branch) branch="$2"; shift 2 ;;
+      --base) base="$2"; shift 2 ;;
+      --profile) profile="$2"; shift 2 ;;
+      --) shift; task="$*"; break ;;
+      *) die "unknown option $1" ;;
+    esac
+  done
+  [[ "$name" =~ ^[a-z0-9][a-z0-9_-]{0,31}$ ]] || die "--name: 1-32 of a-z 0-9 - _"
+  [ -n "$task" ] || die "give the task after --"
+  hc get "$name" --json >/dev/null 2>&1 && die "a terminal named $name already exists"
+
+  local space session dir sha=""
+  space=$(mylabel herdr.space); session=$(mylabel herdr.claude-session)
+  profile="${profile:-$(mylabel herdr.profile)}"; profile="${profile:-company}"
+  [ -n "$space" ] || die "this terminal isn't in a Herdr space"
+
+  local claude_args=()
+  if [ "$fork" = 1 ]; then
+    [ -n "$session" ] || die "--fork: this Claude session has no herdr.claude-session label (restart it once so the hook records it)"
+    claude_args=(--resume "$session" --fork-session)
+  fi
+
+  dir="$PWD"
+  local labels=(--label "herdr.space=$space" --label "herdr.tab=tb$(openssl rand -hex 16)" --label "hc-worker.parent=$me")
+  if [ "$worktree" = 1 ]; then
+    local root; root=$(repo_root) || die "not in a git repository (use --no-worktree)"
+    branch="${branch:-wt/$name}"; base="${base:-HEAD}"
+    sha=$(git rev-parse --short "$base^{commit}") || die "--base $base is not a commit"
+    git show-ref --verify --quiet "refs/heads/$branch" && die "branch $branch already exists"
+    dir="$root/.claude/worktrees/$name"
+    [ -e "$dir" ] && die "$dir already exists"
+    git worktree add --quiet -b "$branch" "$dir" "$sha" >&2
+    labels+=(--label "hc-worker.worktree=$dir" --label "hc-worker.branch=$branch" --label "hc-worker.base=$sha")
+  fi
+
+  hc run --bg --json --name "$name" --cwd "$dir" "${labels[@]}" -- \
+    "$HOME/.local/bin/claude-ws" --profile "$profile" -- ${claude_args[@]+"${claude_args[@]}"} >/dev/null
+
+  # Wait until Claude is ready for input. A dialog (permissions, login) is the person's to answer.
+  local status
+  status=$(hc wait "$name" --timeout 90 --json | jq -r '.status // empty')
+  if [ "$status" != "idle" ]; then
+    jq -n --arg n "$name" --arg s "$status" --arg d "$dir" \
+      '{name:$n, started:true, task_sent:false, status:$s, folder:$d,
+        note:"Not ready for its task. Ask the person to look at its tab (hc read it first); never answer its dialogs yourself. Then: hc send <name> <task>."}'
+    exit 3
+  fi
+
+  local scope
+  if [ "$worktree" = 1 ]; then
+    scope="Work only in $dir (git worktree, branch $branch, started from $sha). Commit there when your task is done. Never push, merge, rebase onto other branches or edit other worktrees."
+  else
+    scope="You share the orchestrator's checkout ($dir). Do not edit files unless your task explicitly allows it, and then only those files."
+  fi
+  hc send "$name" "$task
+
+---
+You are hc worker \"$name\", started by terminal $me (your orchestrator).
+$scope
+Report to the orchestrator with: hc send $me \"$name: done|blocked|question: <one line>; details: <commit, file or path>\". Report once when done, and as soon as you are blocked or need a decision. Keep reports short; put long output in a file and send its path.
+Other workers: hc-worker list shows them. Message one directly (hc send <name> \"...\") only to agree on a shared interface or warn about an overlapping change, and mention it in your next report.
+Do not start other hc agents or workers. Claude's built-in subagents are fine within your scope." >/dev/null
+
+  jq -n --arg n "$name" --arg d "$dir" --arg b "$branch" --arg s "$sha" --arg p "$profile" --argjson f "$fork" \
+    '{name:$n, started:true, task_sent:true, folder:$d, branch:(if $b=="" then null else $b end),
+      base:(if $s=="" then null else $s end), profile:$p, forked:($f==1)}'
+}
+
+list() {
+  local any=0
+  for t in $(hc ls --json | jq -r '.terminals[].address'); do
+    local j; j=$(hc get "$t" --json 2>/dev/null) || continue
+    [ "$(jq -r '.labels["hc-worker.parent"] // empty' <<<"$j")" = "$me" ] || continue
+    any=1
+    local wt br base ahead=""
+    wt=$(jq -r '.labels["hc-worker.worktree"] // empty' <<<"$j")
+    br=$(jq -r '.labels["hc-worker.branch"] // empty' <<<"$j")
+    base=$(jq -r '.labels["hc-worker.base"] // empty' <<<"$j")
+    [ -n "$br" ] && [ -n "$base" ] && ahead=$(git -C "$wt" rev-list --count "$base..$br" 2>/dev/null || echo "?")
+    jq -c --arg ahead "$ahead" '{name, address, status: (.status.state // .state), branch: .labels["hc-worker.branch"],
+      commits: (if $ahead=="" then null else $ahead end), folder: (.labels["hc-worker.worktree"] // .cwd)}' <<<"$j"
+  done
+  [ "$any" = 1 ] || echo "no workers"
+}
+
+stop() {
+  local name="${1:-}" force=0; shift || true
+  [ "${1:-}" = "--force" ] && force=1
+  [ -n "$name" ] || die "stop NAME"
+  local j; j=$(hc get "$name" --json 2>/dev/null) || die "no terminal named $name"
+  [ "$(jq -r '.labels["hc-worker.parent"] // empty' <<<"$j")" = "$me" ] || die "$name is not one of this orchestrator's workers"
+  local wt br; wt=$(jq -r '.labels["hc-worker.worktree"] // empty' <<<"$j"); br=$(jq -r '.labels["hc-worker.branch"] // empty' <<<"$j")
+
+  if [ -n "$wt" ] && [ -d "$wt" ] && [ "$force" = 0 ] && [ -n "$(git -C "$wt" status --porcelain)" ]; then
+    die "$name has uncommitted changes in $wt; ask it to commit, or stop --force to discard them"
+  fi
+  hc kill "$name" >/dev/null 2>&1 || true
+  hc rm "$name" >/dev/null 2>&1 || true
+  echo "ended $name"
+  [ -n "$wt" ] || return 0
+  if [ -d "$wt" ]; then
+    git -C "$(repo_root)" worktree remove $([ "$force" = 1 ] && echo --force) "$wt" && echo "removed worktree $wt"
+  fi
+  if git merge-base --is-ancestor "$br" HEAD 2>/dev/null; then
+    git branch -d "$br" >/dev/null && echo "deleted merged branch $br"
+  else
+    echo "kept branch $br (not merged into HEAD)"
+  fi
+}
+
+prune() {
+  local dry=0; [ "${1:-}" = "--dry-run" ] && dry=1
+  local root; root=$(repo_root) || die "not in a git repository"
+  local wtdir="$root/.claude/worktrees"
+  [ "$dry" = 1 ] || git -C "$root" worktree prune   # git's own: forget worktrees whose folder is gone
+
+  # Worktrees that a live worker (anyone's) still uses.
+  local live=""
+  for t in $(hc ls --json | jq -r '.terminals[].address'); do
+    live+="$(hc get "$t" --json 2>/dev/null | jq -r '.labels["hc-worker.worktree"] // empty')"$'\n'
+  done
+
+  local removed=0 kept=0 path="" branch="" seen_branches=""
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*) path="${line#worktree }"; branch="" ;;
+      "branch refs/heads/"*) branch="${line#branch refs/heads/}" ;;
+      "")
+        if [[ "$path" == "$wtdir/"* && "$branch" == wt/* ]]; then
+          seen_branches+="$branch"$'\n'
+          local name="${path#$wtdir/}"
+          if grep -qxF "$path" <<<"$live"; then
+            echo "live      $name ($branch): a worker is running there, left alone"; kept=$((kept+1))
+          elif [ -n "$(git -C "$path" status --porcelain 2>/dev/null)" ]; then
+            echo "keep      $name ($branch): uncommitted changes in $path"; kept=$((kept+1))
+          elif ! git -C "$root" merge-base --is-ancestor "$branch" HEAD; then
+            echo "keep      $name ($branch): $(git -C "$root" rev-list --count "HEAD..$branch") commit(s) not merged into HEAD"; kept=$((kept+1))
+          elif [ "$dry" = 1 ]; then
+            echo "would rm  $name ($branch): clean and merged"; removed=$((removed+1))
+          else
+            git -C "$root" worktree remove "$path" && git -C "$root" branch -d "$branch" >/dev/null \
+              && echo "removed   $name ($branch): clean and merged"; removed=$((removed+1))
+          fi
+        fi
+        path="" branch="" ;;
+    esac
+  done < <(git -C "$root" worktree list --porcelain; echo)
+
+  # wt/* branches whose worktree is already gone.
+  for b in $(git -C "$root" for-each-ref --format='%(refname:short)' 'refs/heads/wt/*'); do
+    grep -qxF "$b" <<<"$seen_branches" && continue
+    if git -C "$root" merge-base --is-ancestor "$b" HEAD; then
+      if [ "$dry" = 1 ]; then echo "would rm  branch $b: merged, no worktree"
+      else git -C "$root" branch -d "$b" >/dev/null && echo "removed   branch $b: merged, no worktree"; fi
+      removed=$((removed+1))
+    else
+      echo "keep      branch $b: $(git -C "$root" rev-list --count "HEAD..$b") commit(s) not merged, no worktree"; kept=$((kept+1))
+    fi
+  done
+  echo "prune: $removed $([ "$dry" = 1 ] && echo "to remove" || echo removed), $kept kept"
+}
+
+case "${1:-}" in
+  start) shift; start "$@" ;;
+  list) list ;;
+  stop) shift; stop "$@" ;;
+  prune) shift; prune "$@" ;;
+  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac

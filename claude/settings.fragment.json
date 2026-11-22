@@ -1,0 +1,11 @@
+{
+  "statusLine": { "type": "command", "command": "~/.claude/statusline-account.sh", "padding": 0 },
+  "hooks": {
+    "SessionStart": [ { "hooks": [ { "type": "command", "command": "~/.claude/herdr-profile-label.sh set" } ] } ],
+    "SessionEnd":   [ { "hooks": [ { "type": "command", "command": "~/.claude/herdr-profile-label.sh clear" } ] } ]
+  },
+  "permissions": {
+    "allow": [ "Bash(hc:*)", "Bash(herdr-app:*)", "Bash(hc-worker:*)", "Bash(claude-ws:*)" ],
+    "deny":  [ "Bash(hc keys:*)" ]
+  }
+}
