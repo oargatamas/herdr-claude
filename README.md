@@ -63,6 +63,48 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
 Profiles: company = `~/.claude` (`claude`), personal = `~/.claude-personal`
 (`CLAUDE_CONFIG_DIR=~/.claude-personal claude`, e.g. via an alias `claude-personal`).
 
+## How a worker's model is chosen
+
+The orchestrating Claude chooses each worker's model and effort **by judgment, following the
+rules in the `hc-parallel-dev` skill**. Nothing scores tasks automatically: `hc-worker` only
+starts the worker on what it is told (`--model`, `--effort`).
+
+1. While planning, the orchestrator writes each worker's task (goal, scope, interfaces, done)
+   and asks: *how much must this worker figure out for itself*, and *how costly is a subtle
+   mistake?*
+2. It places the task in a tier:
+
+   | Tier | Model / effort | For tasks that are |
+   |---|---|---|
+   | Light | `haiku` / `low` | Fully specified and mechanical: boilerplate from a pattern, renames, docs, simple tests, read-only lookups |
+   | Standard | `sonnet` / `medium` | Ordinary implementation with a clear spec, one area, existing patterns |
+   | Complex | `opus` / `high` | Needs judgment: design, cross-cutting changes, unclear debugging, security, data/migrations, anything where a plausible-but-wrong change is expensive |
+
+3. It adjusts: **up** for gaps in the spec, unfamiliar or tangled code, silent failure modes
+   (data, auth, money), or a `--fork` worker reasoning over a long conversation; **down** when
+   the change can be written out almost line by line or the worker only reads. `opus` /
+   `xhigh`/`max` only for the single hardest problem in a plan, with a stated reason.
+4. The plan shown to you lists every worker's model and effort with a one-line reason, and
+   waits for your go-ahead. Your instructions override the table ("keep it cheap", "opus for
+   everything").
+5. After the fact: if a worker gets stuck on reasoning, or fails review twice for reasoning
+   reasons, the orchestrator tells you and escalates: the worker commits what it has, is
+   stopped (its branch is kept), and a successor one tier up continues from that branch
+   (`hc-worker start --name <name>-2 --base wt/<name> --model … --effort …`).
+
+What follows from this:
+- **The task description drives the choice.** A well-specified task lands in a cheaper tier;
+  a vague one goes up.
+- **It's judgment, so it can vary** between runs, like two developers sizing the same ticket.
+  The plan is the checkpoint.
+- **To make it more predictable**, add fixed rules to the skill's "Choosing each worker's
+  model" section, e.g. "anything touching migrations or auth is always `opus`", or a default
+  budget per repository.
+
+Tested in a sandbox: `haiku` and `sonnet` workers started on Haiku 5.5 and Sonnet 5.5 (checked
+in their status lines), and an escalation from a `haiku` worker to an `opus` successor on its
+branch, merged and cleaned up by `hc-worker stop` and `hc-worker prune`.
+
 ## Layout of this repository
 
 | Path | Installed to |
