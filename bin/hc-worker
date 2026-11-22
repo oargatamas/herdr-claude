@@ -1,9 +1,12 @@
 #!/bin/bash
-# hc-worker: start, list and stop parallel Claude workers, each in its own Herdr subtab and
+# hc-worker: start, list and stop parallel Claude workers, each in its own Herdr pane and
 # (by default) its own git worktree. Used by the hc-parallel-dev skill; run it from inside
 # the orchestrating Claude's terminal ($HC_TERMINAL_ID is the orchestrator).
 #
 #   hc-worker start --name NAME [options] -- "task"
+#       (default)          a split in the orchestrator's tab: the first worker to its right,
+#                          later ones stacked below the previous worker (one column of workers)
+#       --tab              its own new tab in the orchestrator's space instead
 #       --fork             fork the orchestrator's conversation (worker knows everything said so far)
 #       --no-worktree      work in the orchestrator's folder (read-only workers: reviewers, research)
 #       --branch BRANCH    worktree branch (default: wt/NAME)
@@ -27,16 +30,55 @@ me="${HC_TERMINAL_ID:-}"
 [ -n "$me" ] || die "not inside an hc terminal (HC_TERMINAL_ID is unset)"
 mylabel() { hc get "$me" --json | jq -r --arg k "$1" '.labels[$k] // empty'; }
 
+# Gives a freshly started worker (an hc child without a pane) a split in the orchestrator's
+# tab. terminal.keep splits the focused pane, so: focus the newest worker already in this
+# tab and split it "down" (or, for the first one, the orchestrator "right"), then give focus
+# back to whatever had it. A Herdr tab label at start would make Herdr add a column instead.
+place_split() {
+  local name="$1" addr mytab before anchor="" newest=0
+  herdr-app status >/dev/null 2>&1 || { echo "hc-worker: Herdr isn't running; $name stays a sub-agent without a pane" >&2; return 0; }
+  addr=$(hc get "$name" --json | jq -r .address)
+  mytab=$(mylabel herdr.tab)
+  before=$(herdr-app status | jq -r '.focused_pane // empty')
+  for t in $(hc ls --json | jq -r '.terminals[].address'); do
+    [ "$t" = "$addr" ] && continue
+    local j; j=$(hc get "$t" --json 2>/dev/null) || continue
+    jq -e --arg me "$me" --arg tab "$mytab" '.labels["hc-worker.parent"] == $me and .labels["hc-worker.place"] == "split"
+      and .labels["herdr.tab"] == $tab' <<<"$j" >/dev/null || continue
+    local c; c=$(jq -r '.created_ms // 0' <<<"$j")
+    [ "$c" -gt "$newest" ] && { newest=$c; anchor=$t; }
+  done
+  local target="$me" side=right kept=0
+  [ -n "$anchor" ] && { target="$anchor"; side=down; }
+  # hc run returns before Herdr has registered the new terminal: keep is refused until it has.
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+    herdr-app do pane.focus --terminal "$target" >/dev/null 2>&1 || true
+    if herdr-app do terminal.keep --terminal "$addr" --place "$side" >/dev/null 2>&1; then kept=1; break; fi
+    sleep 0.2
+  done
+  if [ "$kept" = 1 ]; then
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do   # keep is acknowledged before it lands
+      [ -n "$(hc get "$addr" --json | jq -r '.labels["herdr.tab"] // empty')" ] && break
+      sleep 0.1
+    done
+  else
+    echo "hc-worker: Herdr didn't give $name a pane; it runs as a sub-agent (see the agents list)" >&2
+  fi
+  if [ -n "$before" ]; then herdr-app do pane.focus --pane "$before" >/dev/null 2>&1 || herdr-app do pane.focus --terminal "$me" >/dev/null
+  else herdr-app do pane.focus --terminal "$me" >/dev/null; fi
+}
+
 repo_root() {  # the main checkout, even when called from inside a worktree
   local common; common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
   dirname "$common"
 }
 
 start() {
-  local name="" fork=0 worktree=1 branch="" base="" profile="" task=""
+  local name="" fork=0 worktree=1 branch="" base="" profile="" task="" place=split
   while [ $# -gt 0 ]; do
     case "$1" in
       --name) name="$2"; shift 2 ;;
+      --tab) place=tab; shift ;;
       --fork) fork=1; shift ;;
       --no-worktree) worktree=0; shift ;;
       --branch) branch="$2"; shift 2 ;;
@@ -62,7 +104,10 @@ start() {
   fi
 
   dir="$PWD"
-  local labels=(--label "herdr.space=$space" --label "herdr.tab=tb$(openssl rand -hex 16)" --label "hc-worker.parent=$me")
+  local labels=(--label "hc-worker.parent=$me" --label "hc-worker.place=$place")
+  # A new tab: label it with this space and a tab id Herdr doesn't know yet. A split: no Herdr
+  # labels; place_split gives it a pane once it runs.
+  [ "$place" = tab ] && labels+=(--label "herdr.space=$space" --label "herdr.tab=tb$(openssl rand -hex 16)")
   if [ "$worktree" = 1 ]; then
     local root; root=$(repo_root) || die "not in a git repository (use --no-worktree)"
     branch="${branch:-wt/$name}"; base="${base:-HEAD}"
@@ -76,14 +121,22 @@ start() {
 
   hc run --bg --json --name "$name" --cwd "$dir" "${labels[@]}" -- \
     "$HOME/.local/bin/claude-ws" --profile "$profile" -- ${claude_args[@]+"${claude_args[@]}"} >/dev/null
+  [ "$place" = split ] && place_split "$name"
 
   # Wait until Claude is ready for input. A dialog (permissions, login) is the person's to answer.
-  local status
-  status=$(hc wait "$name" --timeout 90 --json | jq -r '.status // empty')
+  # The worker's own status is the truth: hc wait also returns early (without a status, maybe
+  # with an error) whenever a message reaches the orchestrator, e.g. another worker's report.
+  local status="" deadline=$(( $(date +%s) + 90 ))
+  while :; do
+    status=$(hc get "$name" --json 2>/dev/null | jq -r '.status.state // .state // empty' || true)
+    case "$status" in idle|blocked|error|exited|finished) break ;; esac
+    [ "$(date +%s)" -ge "$deadline" ] && break
+    hc wait "$name" --timeout 10 --json >/dev/null 2>&1 || sleep 1
+  done
   if [ "$status" != "idle" ]; then
     jq -n --arg n "$name" --arg s "$status" --arg d "$dir" \
       '{name:$n, started:true, task_sent:false, status:$s, folder:$d,
-        note:"Not ready for its task. Ask the person to look at its tab (hc read it first); never answer its dialogs yourself. Then: hc send <name> <task>."}'
+        note:"Not ready for its task. Ask the person to look at its pane (hc read it first); never answer its dialogs yourself. Then: hc send <name> <task>."}'
     exit 3
   fi
 
@@ -102,8 +155,8 @@ Report to the orchestrator with: hc send $me \"$name: done|blocked|question: <on
 Other workers: hc-worker list shows them. Message one directly (hc send <name> \"...\") only to agree on a shared interface or warn about an overlapping change, and mention it in your next report.
 Do not start other hc agents or workers. Claude's built-in subagents are fine within your scope." >/dev/null
 
-  jq -n --arg n "$name" --arg d "$dir" --arg b "$branch" --arg s "$sha" --arg p "$profile" --argjson f "$fork" \
-    '{name:$n, started:true, task_sent:true, folder:$d, branch:(if $b=="" then null else $b end),
+  jq -n --arg n "$name" --arg d "$dir" --arg b "$branch" --arg s "$sha" --arg p "$profile" --argjson f "$fork" --arg pl "$place" \
+    '{name:$n, started:true, task_sent:true, place:$pl, folder:$d, branch:(if $b=="" then null else $b end),
       base:(if $s=="" then null else $s end), profile:$p, forked:($f==1)}'
 }
 
@@ -206,5 +259,5 @@ case "${1:-}" in
   list) list ;;
   stop) shift; stop "$@" ;;
   prune) shift; prune "$@" ;;
-  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,/^set -euo/p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

@@ -10,13 +10,13 @@ When `$HC_TERMINAL_ID` is set, this session runs in a Herdr terminal:
 - Prefer `hc run --bg` + `hc wait` over blocking shell calls for slow work (builds, test
   suites, CI watches), so this session stays reachable.
 - Never answer another session's dialogs (permissions, trust, login) with `hc keys` or
-  forced sends: tell the person which tab needs them.
+  forced sends: tell the person which pane needs them.
 
 Custom commands (in `~/.local/bin`):
 
 - `claude-ws [left|up] [--profile company|personal] [-- <claude args>]`: Claude with this
   workspace's profile (company = `~/.claude`, personal = `~/.claude-personal`).
-- `hc-worker start|list|stop`: parallel workers in Herdr subtabs and git worktrees. For
+- `hc-worker start|list|stop|prune`: parallel workers in Herdr splits (or tabs) and git worktrees. For
   splitting work across agents, use the `hc-parallel-dev` skill, which drives it.
 
 Each Claude terminal carries the labels `herdr.profile` and `herdr.claude-session` (set by a

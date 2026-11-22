@@ -1,11 +1,11 @@
 ---
 name: hc-parallel-dev
-description: Real parallel development with independent Claude workers in Herdr subtabs, coordinated through herdr-core (hc). Each implementing worker gets its own git worktree; workers can start fresh or as a fork of this conversation; all coordination uses hc send / hc wait / hc read / hc interrupt. Use when the user asks to split work across agents, run tasks in parallel, "spin up workers", fan out implementation, delegate to subtabs, or fork this conversation into workers. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
+description: Real parallel development with independent Claude workers in Herdr split panes beside you, coordinated through herdr-core (hc). Each implementing worker gets its own git worktree; workers can start fresh or as a fork of this conversation; all coordination uses hc send / hc wait / hc read / hc interrupt. Use when the user asks to split work across agents, run tasks in parallel, "spin up workers", fan out implementation, delegate to workers in splits or tabs, or fork this conversation into workers. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
 ---
 
 # Parallel development with hc workers
 
-You are the **orchestrator**. You split the work, start workers in their own Herdr subtabs,
+You are the **orchestrator**. You split the work, start workers in panes beside you (a column of splits in your tab),
 answer their questions, and integrate the result. Workers are full, visible Claude sessions
 the person can watch, type into and keep; they are not your built-in subagents.
 
@@ -24,7 +24,7 @@ the person can watch, type into and keep; they are not your built-in subagents.
 
 | Need | Use |
 |---|---|
-| Start a worker (subtab, worktree, profile, task) | `hc-worker start` (below). Do not hand-roll `herdr-app do tab.new`, `hc run` or `git worktree add`: the helper sets the labels, the trusted worktree folder, the profile, the readiness wait and the reporting rules. |
+| Start a worker (split pane, worktree, profile, task) | `hc-worker start` (below). Do not hand-roll `herdr-app do tab.new`/`terminal.keep`, `hc run` or `git worktree add`: the helper does the placement, labels, trusted worktree folder, profile, readiness wait and reporting rules. |
 | Worker that needs this conversation's context | `hc-worker start --fork` (copies the whole conversation: costly, use deliberately) |
 | Worker that only needs a clear brief | `hc-worker start` without `--fork` (cheaper, cleaner context) |
 | Read-only worker (review, research, tests) | `--no-worktree` |
@@ -59,13 +59,15 @@ hc-worker start --name ui --fork -- "From the plan we agreed, build the UI part.
   them (report with `hc send <you>`, commit on its branch, never push or merge, no sub-workers).
 - Output is JSON. `task_sent: false` with a `status` means the worker stopped at a dialog
   (permissions, login, trust). **Never answer a worker's dialogs yourself** (no `hc keys`,
-  no `--force` sends): tell the person which tab needs them, then `hc send <name> "<task>"`
+  no `--force` sends): tell the person which pane needs them, then `hc send <name> "<task>"`
   once they've dealt with it (`hc read <name>` first to check).
-- Options: `--profile company|personal` (default: yours), `--base REF` (default: `HEAD`),
+- Options: `--tab` (own tab instead of a split), `--profile company|personal` (default: yours), `--base REF` (default: `HEAD`),
   `--branch NAME` (default: `wt/<name>`).
 
-Workers inherit your Claude profile, so their tabs show the same COMPANY/PERSONAL badge.
-New tabs open without stealing focus.
+Placement: by default each worker is a split in your tab: the first to your right, the next ones
+stacked below it in that column; focus goes back to where it was. With more than ~4 workers the
+panes get small: start the extra ones with `--tab` (their own tab in this space) instead.
+Workers inherit your Claude profile, so they show the same COMPANY/PERSONAL badge.
 
 ## 3. Coordinate while they work
 
