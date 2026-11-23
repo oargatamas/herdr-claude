@@ -5,6 +5,7 @@
 //     checks, review state, branch's latest CI run (via gh)
 //   RITE OF TESTING: last pytest/vitest or hc test result (never runs tests)
 //   HERESIES TO PURGE: TODO/FIXME scan
+//   Jira keys (ABC-123) in branches and PR titles get a link to the Jira site seen in sessions
 //   DATA-LITANY: per-repo notes
 // AUSPEX: read-only engineering readings for the focused terminal's repository, in the
 // Mechanicus look. It never changes anything: git and gh are only asked questions
@@ -57,6 +58,17 @@ function runState(r) {
   return r.conclusion === "success" ? "pass" : ["skipped", "neutral"].includes(r.conclusion) ? "idle" : "fail";
 }
 
+// Jira issue keys (ABC-123) in a branch or title; common non-issue look-alikes are skipped.
+const JIRA_RE = /\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/g;
+const NOT_JIRA = new Set(["UTF", "ISO", "SHA", "RFC", "HTTP", "TLS", "SSL", "CVE", "GPT", "MD5", "X11", "AES", "RSA"]);
+const jiraKeys = (...texts) => {
+  const keys = [];
+  for (const text of texts) for (const m of (text ?? "").toUpperCase().matchAll(JIRA_RE))
+    if (!NOT_JIRA.has(m[1]) && !keys.includes(m[0])) keys.push(m[0]);
+  return keys;
+};
+const JIRA_SITE_RE = /https:\/\/([\w-]+\.atlassian\.net)\/browse\//g;
+
 // "~/…" for a folder under home.
 const short = (cwd) => { const h = home(); return !cwd ? "" : cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd; };
 
@@ -76,6 +88,7 @@ export default class Auspex extends View {
     this.prCache = {};         // machine|cwd|branch → { at, pr, error }
     this.mentions = [];        // [{ url, sessions: [names], pr }] PR links seen in the shown tab's terminals
     this.urlCache = {};        // url → { at, pr }
+    try { this.jiraSite = localStorage.getItem("jira-site"); } catch { this.jiraSite = null; } // e.g. acme.atlassian.net
     this.tabKeyNow = null;
     this.tabBusy = false;
     this.notesRoot = null;
@@ -136,6 +149,7 @@ export default class Auspex extends View {
     const space = spaces().find((s) => s.id === f?.space) ?? spaces().find((s) => s.active);
     const tab = f?.tab ?? space?.tabs?.find((x) => x.active)?.id;
     const found = new Map(); // url → names
+    let site = null;
     for (const p of panes().filter((x) => x.tab === tab && x.terminal)) {
       const r = await hc(["read", p.terminal, "--lines", String(p.scroll ? MENTION_LINES : 0)]).catch(() => null);
       if (!r || r.code !== 0) continue;
@@ -145,9 +159,10 @@ export default class Auspex extends View {
       const sid = labels["herdr.claude-session"];
       if (sid && /^[\w-]+$/.test(sid)) {
         const dir = labels["herdr.profile"] === "personal" ? "$HOME/.claude-personal" : "$HOME/.claude";
-        const g = await sh("sh", ["-c", `grep -ohE 'https?://[^"\\\\ )<>]+/(pull|merge_requests|pull-requests)/[0-9]+' ${dir}/projects/*/"$1".jsonl 2>/dev/null | tail -n 300; true`, "sh", sid], { on: space?.machine ?? null });
+        const g = await sh("sh", ["-c", `grep -ohE -e 'https?://[^"\\\\ )<>]+/(pull|merge_requests|pull-requests)/[0-9]+' -e 'https://[A-Za-z0-9-]+\\.atlassian\\.net/browse/' ${dir}/projects/*/"$1".jsonl 2>/dev/null | tail -n 300; true`, "sh", sid], { on: space?.machine ?? null });
         text = g.stdout + "\n" + text; // transcript first, the screen (newest) last
       }
+      for (const m of text.matchAll(JIRA_SITE_RE)) site = m[1]; // the last one seen wins
       for (const m of text.matchAll(PR_URL_RE)) {
         const url = m[0].replace(/[).,;:'"\]]+$/, "");
         const names = found.get(url) ?? [];
@@ -155,6 +170,10 @@ export default class Auspex extends View {
         found.delete(url); // re-insert: Map order = last seen, newest at the end
         found.set(url, names);
       }
+    }
+    if (site && site !== this.jiraSite) {
+      this.jiraSite = site;
+      try { localStorage.setItem("jira-site", site); } catch {}
     }
     // Details from gh for GitHub links (cached GH_TTL); other hosts show as plain links.
     await Promise.all([...found.keys()].filter((u) => u.includes("github.com/")).map(async (url) => {
@@ -321,6 +340,15 @@ export default class Auspex extends View {
       .child(div().w(78).flex_none().text_color(t.dim).child(label))
       .child(div().flex_1().min_w(0).truncate().text_color(color ?? t.foreground).child(value));
     const plate = (text, color) => div().flex_none().px(4).border(1).border_color(color).text_color(color).text_size(10).child(text);
+    // Clickable Jira chips for the keys in these texts (nothing without a known Jira site).
+    const jira = (id, ...texts) => {
+      const site = this.jiraSite, keys = site ? jiraKeys(...texts) : [];
+      return keys.map((k) => div().id(`${id}-jira-${k}`).flex_none().px(4).border(1).border_color(t.ansi4 ?? t.accent)
+        .text_color(t.ansi4 ?? t.accent).text_size(10).cursor_pointer().hover((el) => el.bg(t.hover))
+        .tooltip(`Open ${k} in Jira (${site})`)
+        .on_click((_e, cx) => { cx.stop_propagation(); this.open(`https://${site}/browse/${k}`); })
+        .child(`◆ ${k}`));
+    };
 
     const r = this.repo, gh = r?.root ? this.gh[r.root] : null, slow = r?.root ? this.slow[r.root] : null;
     const body = v_flex().px(16).pb(14);
@@ -333,6 +361,7 @@ export default class Auspex extends View {
       const dirty = r.staged + r.unstaged + r.untracked + r.conflicts;
       body.child(row("repo", r.root.split("/").pop() + (r.machine ? ` @${r.machine}` : "")))
         .child(row("branch", r.branch ?? "?", t.accent))
+        .when(jira("repo", r.branch).length > 0, (el) => el.child(h_flex().gap(4).pl(86).flex_wrap().children(jira("repo", r.branch))))
         .child(row("upstream", r.upstream ? `${r.upstream}  ↑${r.ahead} ↓${r.behind}` : "none bound", r.upstream ? (r.behind ? t.working : t.foreground) : t.dim))
         .child(row("state", dirty ? `+${r.staged} staged · ~${r.unstaged} changed · ?${r.untracked} new${r.conflicts ? ` · ✕${r.conflicts} conflict` : ""}` : "pure (clean)", r.conflicts ? t.blocked : dirty ? t.working : t.done))
         .when(Boolean(r.commit), (el) => el.child(row("last", `${r.commit.hash} ${r.commit.subject} · ${ago(r.commit.at)}`, t.muted)));
@@ -347,8 +376,10 @@ export default class Auspex extends View {
       const pr = g.pr, s = pr ? rollup(pr.statusCheckRollup) : null;
       const who = div().text_size(10.5).text_color(t.dim).truncate().child(`${g.sessions.join(", ")} · ${g.branch} · ${short(g.cwd)}`);
       if (!pr) {
-        body.child(v_flex().py(2).child(who)
-          .child(div().text_size(11.5).text_color(t.dim).truncate().child(g.error ? `gh: ${g.error}` : "no open pull-petition")));
+        body.child(v_flex().id(`tab-branch-${g.id}`).py(2).child(who)
+          .child(h_flex().gap(4).items_center()
+            .child(div().flex_1().min_w(0).text_size(11.5).text_color(t.dim).truncate().child(g.error ? `gh: ${g.error}` : "no open pull-petition"))
+            .children(jira(`tb-${g.id}`, g.branch))));
         continue;
       }
       body.child(v_flex().id(`tab-pr-${pr.url}`).py(2).px(2).cursor_pointer().hover((el) => el.bg(t.hover))
@@ -360,7 +391,9 @@ export default class Auspex extends View {
           .when(pr.reviewDecision === "APPROVED", (el) => el.child(plate("✓", t.done)))
           .when(pr.reviewDecision === "CHANGES_REQUESTED", (el) => el.child(plate("Δ", t.blocked)))
           .child(plate(s ? word(s) : "—", tone(s))))
-        .child(div().text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${pr.url.replace(/^https?:\/\//, "")}`)));
+        .child(h_flex().gap(4).items_center()
+          .child(div().flex_1().min_w(0).text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${pr.url.replace(/^https?:\/\//, "")}`))
+          .children(jira(`tp-${pr.url}`, pr.title, g.branch))));
     }
     // PR links found in the text of this tab's terminals (newest first).
     if (this.mentions.length) {
@@ -379,7 +412,9 @@ export default class Auspex extends View {
             .when(pr.reviewDecision === "CHANGES_REQUESTED", (el) => el.child(plate("Δ", t.blocked)))
             .child(plate(pr.state, stateTone[pr.state] ?? t.dim))
             .when(pr.state === "OPEN", (el) => el.child(plate(s ? word(s) : "—", tone(s))))))
-          .child(div().text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${path}`)));
+          .child(h_flex().gap(4).items_center()
+            .child(div().flex_1().min_w(0).text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${path}`))
+            .children(jira(`mp-${m.url}`, pr?.title))));
       }
     }
     if (r?.root) {
@@ -403,6 +438,7 @@ export default class Auspex extends View {
             .child(div().flex_1().min_w(0).truncate().text_color(mine ? t.foreground : t.muted).child(`${pr.isDraft ? "[draft] " : ""}${pr.title}`))
             .when(pr.reviewDecision === "APPROVED", (el) => el.child(plate("✓", t.done)))
             .when(pr.reviewDecision === "CHANGES_REQUESTED", (el) => el.child(plate("Δ", t.blocked)))
+            .children(jira(`rp-${pr.number}`, pr.title, pr.headRefName))
             .child(plate(s ? word(s) : "—", tone(s))));
         }
       }
