@@ -1,3 +1,9 @@
+// AUSPEX sections:
+//   REPO-SPIRIT: git branch, upstream ahead/behind, dirty counts, last commit
+//   PULL-PETITIONS & CI: open PRs, checks, review state, branch's latest CI run (via gh)
+//   RITE OF TESTING: last pytest/vitest or hc test result (never runs tests)
+//   HERESIES TO PURGE: TODO/FIXME scan
+//   DATA-LITANY: per-repo notes
 // AUSPEX: read-only engineering readings for the focused terminal's repository, in the
 // Mechanicus look. It never changes anything: git and gh are only asked questions
 // (git with --no-optional-locks), tests are never run, only their last results read.
