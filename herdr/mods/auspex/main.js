@@ -110,6 +110,20 @@ function parseStatus(text, into) {
   return into;
 }
 
+// "github.com:acme/widgets.git" / "../widgets" → "widgets".
+const repoName = (url) => (url ?? "").replace(/\/+$/, "").replace(/\.git$/, "").split(/[\/:]/).pop() || url;
+
+// submodule path (relative to the repo that declares it) → url, from that repo's .gitmodules.
+async function gitmodules(dir, on) {
+  const r = await sh("git", ["config", "-f", `${dir}/.gitmodules`, "--get-regexp", "^submodule\\..*\\.(path|url)$"], { on });
+  const byName = {};
+  for (const line of r.stdout.split("\n")) {
+    const m = line.match(/^submodule\.(.+)\.(path|url) (.+)$/);
+    if (m) (byName[m[1]] ??= {})[m[2]] = m[3];
+  }
+  return Object.fromEntries(Object.values(byName).filter((x) => x.path).map((x) => [x.path, x.url]));
+}
+
 async function lastCommit(dir, on) {
   const log = await sh("git", ["-C", dir, "log", "-1", "--format=%h\u0001%s\u0001%ct"], { on });
   const [hash, subject, ct] = log.stdout.trim().split("\u0001");
@@ -130,7 +144,8 @@ export default class Auspex extends View {
       });
       return;
     }
-    this.subs = {};            // root → { at, list: [{ path, mark, recorded, ...status, branch, commit }] }
+    this.subs = {};            // root → { at, list: [{ path, parent, name, url, mark, recorded, ...status, branch, commit }] }
+    try { this.subOpen = new Set(JSON.parse(localStorage.getItem("sub-open") ?? "[]")); } catch { this.subOpen = new Set(); }
     this.repo = null;          // { root, machine, branch, upstream, ahead, behind, staged, unstaged, untracked, conflicts, commit }
     this.cwdKey = null;
     this.busy = false;
@@ -169,6 +184,8 @@ export default class Auspex extends View {
   }
 
   focusKey() {
+    // A copy opened with props.cwd (e.g. as a window) stays on that folder instead of following focus.
+    if (props()?.cwd) return `${props().machine ?? ""}\u0000${props().cwd}`;
     const f = focused(), space = spaces().find((s) => s.id === f?.space) ?? spaces().find((s) => s.active);
     const cwd = f?.cwd ?? space?.folder ?? null;
     return cwd ? `${space?.machine ?? ""}\u0000${cwd}` : null;
@@ -319,7 +336,8 @@ export default class Auspex extends View {
     });
   }
 
-  // Submodules (recursive): recorded vs checked-out commit, dirty counts, branch, last commit.
+  // Submodules (recursive) as a tree by nesting: name from the declaring .gitmodules url,
+  // recorded vs checked-out commit, dirty counts, branch, last commit.
   async loadSubs(root, on) {
     const c = this.subs[root];
     if (c && Date.now() - c.at < SUB_EVERY) return;
@@ -329,7 +347,15 @@ export default class Auspex extends View {
       const m = line.match(/^([ +\-U])([0-9a-f]+) (\S+)/);
       if (m) list.push({ mark: m[1], recorded: m[2].slice(0, 7), path: m[3] });
     }
-    await Promise.all(list.slice(0, 16).map(async (x) => {
+    // Names: each repo that declares submodules (the root and initialized parents) has a .gitmodules.
+    list.sort((a, b) => a.path.localeCompare(b.path));
+    for (const x of list) x.parent = list.filter((y) => x.path.startsWith(y.path + "/")).sort((a, b) => b.path.length - a.path.length)[0]?.path ?? null;
+    const declarers = [{ dir: root, prefix: "" }, ...list.filter((x) => x.mark !== "-" && list.some((y) => y.parent === x.path)).map((x) => ({ dir: `${root}/${x.path}`, prefix: `${x.path}/` }))];
+    const urls = {};
+    for (const d of await Promise.all(declarers.map(async (d) => ({ ...d, map: await gitmodules(d.dir, on) }))))
+      for (const [path, url] of Object.entries(d.map)) urls[d.prefix + path] = url;
+    for (const x of list) { x.url = urls[x.path] ?? null; x.name = repoName(x.url) || x.path.split("/").pop(); }
+    await Promise.all(list.slice(0, 32).map(async (x) => {
       if (x.mark === "-") return; // not initialized: nothing checked out to read
       const dir = `${root}/${x.path}`;
       const [s, commit, branch] = await Promise.all([
@@ -341,6 +367,12 @@ export default class Auspex extends View {
       Object.assign(x, { dir, commit, branch });
     }));
     this.subs[root] = { at: Date.now(), list };
+  }
+
+  // Opens or closes one submodule node; remembered per repo|path.
+  toggleSub(key) {
+    if (this.subOpen.has(key)) this.subOpen.delete(key); else this.subOpen.add(key);
+    try { localStorage.setItem("sub-open", JSON.stringify([...this.subOpen])); } catch {}
   }
 
   // Full commit message in a dialog (this mod, opened again with props.commit).
@@ -413,26 +445,42 @@ export default class Auspex extends View {
         .child(row("upstream", r.upstream ? `${r.upstream}  ↑${r.ahead} ↓${r.behind}` : "none bound", r.upstream ? (r.behind ? t.working : t.foreground) : t.dim))
         .child(row("state", dirty ? `+${r.staged} staged · ~${r.unstaged} changed · ?${r.untracked} new${r.conflicts ? ` · ✕${r.conflicts} conflict` : ""}` : "pure (clean)", r.conflicts ? t.blocked : dirty ? t.working : t.done))
         .when(Boolean(r.commit), (el) => el.child(commitRow("last", "repo-last", r.root, r.machine, r.commit, r.root.split("/").pop())));
-      // Submodules
+      // Submodules: the import hierarchy as a tree; a click opens or closes one node.
       const subs = this.subs[r.root]?.list ?? [];
       if (subs.length) {
         body.child(div().text_size(10.5).text_color(t.dim).mt(6).mb(2).child(`SUBMODULES · ${subs.length}`));
         const mark = { "+": ["MOVED", t.working, "checked-out commit differs from the one recorded here"], "-": ["UNINIT", t.dim, "not initialized"], "U": ["CONFLICT", t.blocked, "merge conflict"] };
-        for (const x of subs) {
+        const kids = (path) => subs.filter((y) => y.parent === path);
+        const node = (x, lead, last, depth) => {
+          const key = `${r.root}|${x.path}`, open = this.subOpen.has(key) !== Boolean(props()?.expandAll);
           const dirty = (x.staged ?? 0) + (x.unstaged ?? 0) + (x.untracked ?? 0) + (x.conflicts ?? 0);
           const [word0, color0, why] = mark[x.mark] ?? (dirty ? ["DIRTY", t.working, "uncommitted changes"] : ["SYNCED", t.done, "at the recorded commit, clean"]);
-          const where = !x.branch ? (x.mark === "-" ? `recorded ${x.recorded}` : "")
+          const children = kids(x.path);
+          const branchGlyph = depth === 0 ? "" : last ? "└─" : "├─";
+          const under = lead + (depth === 0 ? "" : last ? "  " : "│ "); // what continues below this node
+          const tree = (text) => div().flex_none().text_color(t.border).child(text);
+          body.child(h_flex().id(`sub-${x.path}`).gap(4).items_center().text_size(12).py(1).cursor_pointer()
+            .hover((el) => el.bg(t.hover)).tooltip(`${x.path}${x.url ? ` · ${x.url}` : ""}`)
+            .on_click((_e, cx) => { this.toggleSub(key); cx.notify(); })
+            .when(Boolean(lead + branchGlyph), (el) => el.child(tree(lead + branchGlyph)))
+            .child(div().w(10).flex_none().text_color(t.accent).child(open ? "▾" : "▸"))
+            .child(div().flex_1().min_w(0).truncate().text_color(open ? t.accent : t.foreground).child(x.name))
+            .when(children.length > 0 && !open, (el) => el.child(div().flex_none().text_size(10).text_color(t.dim).child(`+${children.length}`)))
+            .child(div().id(`sub-mark-${x.path}`).child(plate(word0, color0)).tooltip(why)));
+          if (!open) return;
+          const pad = under + (children.length ? "│ " : "  ") + "  ";
+          const where = !x.branch ? (x.mark === "-" ? `not initialized · recorded ${x.recorded}` : "")
             : x.branch.detached ? (x.branch.name ? `detached · on ${x.branch.name}` : "detached · on no branch") : x.branch.name;
           const updown = x.upstream ? ` ↑${x.ahead} ↓${x.behind}` : "";
-          body.child(v_flex().py(2)
-            .child(h_flex().gap(6).items_center().text_size(12)
-              .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(x.path))
-              .child(div().id(`sub-mark-${x.path}`).child(plate(word0, color0)).tooltip(why)))
-            .child(h_flex().gap(6).text_size(11).pl(8)
-              .child(div().flex_1().min_w(0).truncate().text_color(x.branch?.detached ? t.working : t.accent).child(`${where}${updown}`))
-              .when(dirty > 0, (el) => el.child(div().flex_none().text_color(t.working).child(`+${x.staged} ~${x.unstaged} ?${x.untracked}`))))
-            .when(Boolean(x.commit), (el) => el.child(div().pl(8).child(commitRow(null, `sub-last-${x.path}`, x.dir, r.machine, x.commit, x.path)))));
-        }
+          body.child(h_flex().gap(4).text_size(11)
+            .child(tree(pad))
+            .child(div().flex_1().min_w(0).truncate().text_color(x.branch?.detached || x.mark === "-" ? t.working : t.accent).child(`${where}${updown}`))
+            .when(dirty > 0, (el) => el.child(div().flex_none().text_color(t.working).child(`+${x.staged} ~${x.unstaged} ?${x.untracked}`))));
+          if (x.commit) body.child(h_flex().gap(4).child(tree(pad)).child(div().flex_1().min_w(0).child(commitRow(null, `sub-last-${x.path}`, x.dir, r.machine, x.commit, x.name))));
+          children.forEach((c, i) => node(c, under, i === children.length - 1, depth + 1));
+        };
+        const tops = kids(null);
+        tops.forEach((x, i) => node(x, "", i === tops.length - 1, 0));
       }
     }
 
