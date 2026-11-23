@@ -6,7 +6,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, props, run, theme, home, layout, shared } from "herdr";
+import { panes, props, run, theme, home, layout, shared, openOverlay } from "herdr";
 
 // Sidebar animations on unless stilled with a click on the brand emblem.
 const motion = () => shared("mechanicus.motion") !== false;
@@ -88,6 +88,13 @@ export default class Pane extends View {
       .when(st === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
       .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(0).border(1).border_color(t.blocked).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("⚠ NEEDS YOU")))
       .when(st === "done", el => el.child(div().size(7).flex_none().rounded(0).bg(t.done)))
+      // Prompt composer for agent sessions (always shown): a big text box that sends to this pane.
+      .when(Boolean(p.program?.agent && p.terminal), el => el.child(div().id(`ph-c-${pane}`).flex_none().h(20).px(6).gap(4).flex().items_center()
+        .border(1).border_color(t.input).text_size(10.5).text_color(t.muted).cursor_pointer()
+        .hover((s) => s.text_color(t.accent).border_color(t.accent))
+        .tooltip("Write a long prompt in a big text box")
+        .on_click((_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "composer", kind: "dialog", width: 1100, height: 0.75, props: { terminal: p.terminal, pane, name } }); })
+        .child(svg("mods/chrome-mechanicus/square-pen.svg").size(12)).child("COMPOSE")))
       .when(this.hovered, el => el
         .child(this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
         .child(this.button(t, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))

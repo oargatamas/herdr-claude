@@ -4,13 +4,12 @@
 //   PULL-PETITIONS & CI: the PR of every session in the shown tab and PR links found in
 //     those terminals' text, with checks and review state (via gh)
 //   Jira keys (ABC-123) in branches and PR titles get a link to the Jira site seen in sessions
-//   DATA-LITANY: per-repo notes
 // AUSPEX: read-only engineering readings for the focused terminal's repository, in the
 // Mechanicus look. It never changes anything: git and gh are only asked questions
 // (git with --no-optional-locks).
 // Polls only while shown; gh answers are cached per branch and link.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
+import { v_flex, h_flex } from "gpui-base";
 import { exec, hc, spaces, panes, terminals, focused, layout, theme, window, home, shared, props, openOverlay, closeOverlay, checking } from "herdr";
 
 // Sidebar animations on unless stilled with a click on the brand emblem.
@@ -156,13 +155,6 @@ export default class Auspex extends View {
     try { this.jiraSite = localStorage.getItem("jira-site"); } catch { this.jiraSite = null; } // e.g. acme.atlassian.net
     this.tabKeyNow = null;
     this.tabBusy = false;
-    this.notesRoot = null;
-    this.notes = TextareaState.new({ placeholder: "Inscribe litanies, TODOs, reminders… (kept on this machine, per repository)" });
-    this.notes.set_soft_wrap(true);
-    this.notes.on("change", () => {
-      if (!this.notesRoot) return;
-      try { localStorage.setItem(`notes:${this.notesRoot}`, this.notes.value()); } catch {}
-    });
     if (checking()) return;
     // Cheap check every 2s (no processes): follow focus changes at once.
     cx.timer.every(2000, (cx) => {
@@ -321,12 +313,6 @@ export default class Auspex extends View {
         repo.branch = repo.head;
         if (repo.head === "(detached)") { const b = await branchOf(root, on); repo.branch = null; repo.detachedOn = b.name; }
         this.repo = repo;
-        if (root !== this.notesRoot) {
-          this.notesRoot = root;
-          let saved = "";
-          try { saved = localStorage.getItem(`notes:${root}`) ?? ""; } catch {}
-          this.notes.set_value(saved);
-        }
         cx.notify();
         await this.loadSubs(root, on);
       } finally {
@@ -532,14 +518,6 @@ export default class Auspex extends View {
             .child(div().flex_1().min_w(0).text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${path}`))
             .children(jira(`mp-${m.url}`, pr?.title))));
       }
-    }
-
-    // ── Notes
-    if (r?.root) {
-      body.child(heading("✎", "DATA-LITANY (NOTES)", ""));
-      body.child(div().id("notes").border(1).border_color(t.border).bg(t.background).p(6).text_size(12).text_color(t.foreground)
-        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        .child(Textarea.new(this.notes).h(90).w_full()));
     }
 
     const sidebar = find(layout(), "sidebar");
