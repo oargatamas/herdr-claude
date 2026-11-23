@@ -404,7 +404,7 @@ export default class Auspex extends View {
     const t = theme();
     const tone = (s) => ({ pass: t.done, fail: t.blocked, pending: t.working, idle: t.dim }[s] ?? t.dim);
     const word = (s) => ({ pass: "BLESSED", fail: "CORRUPTED", pending: "IN RITE", idle: "DORMANT" }[s] ?? "—");
-    const heading = (glyph, title, extra) => h_flex().mt(10).mb(4).gap(6).items_center().text_size(11).text_color(t.accent)
+    const heading = (glyph, title, extra) => h_flex().mt(22).mb(8).gap(6).items_center().text_size(11).text_color(t.accent)
       .child(glyph).child(title).child(div().flex_1().h(1).bg(t.border)).when(Boolean(extra), (el) => el.child(div().text_color(t.dim).child(extra)));
     const row = (label, value, color) => h_flex().gap(8).text_size(12)
       .child(div().w(78).flex_none().text_color(t.dim).child(label))
@@ -430,7 +430,7 @@ export default class Auspex extends View {
     };
 
     const r = this.repo;
-    const body = v_flex().px(16).pb(14);
+    const body = v_flex().px(16).pt(2).pb(18);
 
     // ── Repository
     body.child(heading("⚙", "REPO-SPIRIT", this.busy ? "consulting…" : ""));
@@ -447,7 +447,7 @@ export default class Auspex extends View {
       // Submodules: the import hierarchy as a tree; a click opens or closes one node.
       const subs = this.subs[r.root]?.list ?? [];
       if (subs.length) {
-        body.child(div().text_size(10.5).text_color(t.dim).mt(6).mb(2).child(`SUBMODULES · ${subs.length}`));
+        body.child(div().text_size(10.5).text_color(t.dim).mt(12).mb(4).child(`SUBMODULES · ${subs.length}`));
         const mark = { "+": ["MOVED", t.working, "checked-out commit differs from the one recorded here"], "-": ["UNINIT", t.dim, "not initialized"], "U": ["CONFLICT", t.blocked, "merge conflict"] };
         const kids = (path) => subs.filter((y) => y.parent === path);
         const node = (x, lead, last, depth) => {
@@ -486,7 +486,7 @@ export default class Auspex extends View {
     // ── PRs and CI
     body.child(heading("✠", "PULL-PETITIONS & CI", this.tabAt ? ago(this.tabAt) : ""));
     // The PR of every session in the shown tab, with its link.
-    body.child(div().text_size(10.5).text_color(t.dim).mb(2).child("THIS TAB'S SESSIONS"));
+    body.child(div().text_size(10.5).text_color(t.dim).mb(4).child("THIS TAB'S SESSIONS"));
     if (!this.tabPrs.length) body.child(row("sessions", this.tabBusy ? "consulting…" : "no session on a git branch", t.dim));
     for (const g of this.tabPrs) {
       const pr = g.pr, s = pr ? rollup(pr.statusCheckRollup) : null;
@@ -513,7 +513,7 @@ export default class Auspex extends View {
     }
     // PR links found in the text of this tab's terminals (newest first).
     if (this.mentions.length) {
-      body.child(div().text_size(10.5).text_color(t.dim).mt(6).mb(2).child("LINKED IN THIS TAB'S TERMINALS"));
+      body.child(div().text_size(10.5).text_color(t.dim).mt(12).mb(4).child("LINKED IN THIS TAB'S TERMINALS"));
       const stateTone = { OPEN: t.done, MERGED: t.ansi5 ?? t.accent, CLOSED: t.blocked };
       for (const m of this.mentions) {
         const pr = m.pr, s = pr ? rollup(pr.statusCheckRollup) : null;
