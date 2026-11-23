@@ -134,7 +134,7 @@ sidebar.
 | `herdr/mods/auspex/` | AUSPEX, always shown in the left sidebar between Spaces and Servitors: the focused repo's branch, dirty state, ahead/behind and last commit (an icon opens the full message in a dialog); its submodules as an expandable tree of the import hierarchy, named by repo, each with state (synced, moved, dirty, uninitialized, conflict), branch (found by name for detached commits) and last commit; the open PR of every session in the shown tab and PR links found in its terminals (screens and Claude transcripts), with checks and review state via gh (cached 3 min); Jira links for issue keys; per-repo notes. Read-only, polls only while shown |
 | `herdr/mods/servitors-mechanicus/` | Copy of Herdr's `agents` mod (all its features: grouping, sort, pin, peek, history, sub-agents), restyled as SERVITORS |
 | `herdr/mods/status-mechanicus/`, `pane-mechanicus/`, `chrome-mechanicus/` | Copies of Herdr's `workspace-status`, `pane` and `workspace-chrome` (sidebar brand and footer) mods, restyled only; `chrome-mechanicus/cog-skull.svg` is the cog-and-skull emblem in the brand block |
-| `herdr/backgrounds/mechanicus-terminal.png` | Blurred green cog-skull behind every terminal (pane frame background; layout `terminal_opacity` 0.55) |
+| `herdr/backgrounds/mechanicus-terminal.png` | Blurred green cog-skull behind every terminal (pane frame background; layout `terminal_opacity` 0.35) |
 | `herdr/themes/mechanicus.json` | Adeptus Mechanicus cogitator theme: phosphor green on black, brass accents, forge-red buttons |
 | `herdr/mods/spaces-profile/fonts/` | Share Tech Mono (OFL), the UI font of the Mechanicus look |
 | `herdr/keys.fragment.json` | Our key bindings (`__HOME__` = home folder), merged into `keys.json` |
