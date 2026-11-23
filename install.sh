@@ -3,22 +3,27 @@
 # Safe to run again: it replaces its own files, merges into shared ones, and never removes
 # anything it didn't install. Backups of every settings file it changes go next to them.
 #
-#   ./install.sh [--force-keys] [--no-herdr] [--no-switch]
-#     --force-keys  take over a Herdr key that is already bound to something else
-#     --no-herdr    only the Claude Code part (no Herdr app on this machine)
-#     --no-switch   don't switch the running Herdr window to the main-profile layout
+#   ./install.sh [--force-keys] [--no-herdr] [--no-switch] [--personal | --no-personal]
+#     --force-keys   take over a Herdr key that is already bound to something else
+#     --no-herdr     only the Claude Code part (no Herdr app on this machine)
+#     --no-switch    don't switch the running Herdr window to the main-profile layout
+#     --personal     set up a second, personal Claude subscription: add the claude-personal
+#                    alias to your shell (asked interactively when neither flag is given)
+#     --no-personal  don't ask about the personal subscription
 #
 # Claude profiles: every folder in $CLAUDE_PROFILES (default: ~/.claude, plus
 # ~/.claude-personal when it exists). Run again after creating a new profile.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
-FORCE_KEYS=0 HERDR=1 SWITCH=1
+FORCE_KEYS=0 HERDR=1 SWITCH=1 PERSONAL=""
 for a in "$@"; do
   case "$a" in
     --force-keys) FORCE_KEYS=1 ;;
     --no-herdr) HERDR=0 ;;
     --no-switch) SWITCH=0 ;;
+    --personal) PERSONAL=1 ;;
+    --no-personal) PERSONAL=0 ;;
     *) echo "unknown option $a" >&2; exit 2 ;;
   esac
 done
@@ -117,11 +122,53 @@ for p in "${PROFILES[@]}"; do
   ok "$s"
 done
 
-if [ ! -d "$HOME/.claude-personal" ]; then
-  warn "no personal profile (~/.claude-personal). To add one: CLAUDE_CONFIG_DIR=~/.claude-personal claude  (log in), then run this again"
+# ---------------------------------------------------------------- personal profile (optional)
+# A second Claude subscription lives in ~/.claude-personal and is started with the
+# claude-personal alias. Only set up when the person wants one (asked, or --personal).
+say "Personal Claude subscription (optional)"
+ALIAS_LINE="alias claude-personal='CLAUDE_CONFIG_DIR=~/.claude-personal claude'"
+has_alias() {
+  grep -qsE '^[[:space:]]*alias[[:space:]]+claude-personal=' \
+    "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.bashrc" "$HOME/.bash_profile" 2>/dev/null
+}
+# The interactive shell's rc file for the login shell (zsh or bash), else nothing.
+shell_rc() {
+  case "$(basename "${SHELL:-}")" in
+    zsh) echo "$HOME/.zshrc" ;;
+    bash) if [ "$(uname)" = Darwin ] && [ ! -f "$HOME/.bashrc" ]; then echo "$HOME/.bash_profile"; else echo "$HOME/.bashrc"; fi ;;
+    *) echo "" ;;
+  esac
+}
+if has_alias; then
+  ok "claude-personal alias"
+  [ -d "$HOME/.claude-personal" ] \
+    || warn "no personal profile yet: run claude-personal, log in with the personal subscription, then run this again"
+else
+  want="$PERSONAL"
+  if [ -z "$want" ]; then
+    if [ -t 0 ]; then
+      read -r -p "  ? Set up a second, personal Claude subscription (adds a claude-personal alias)? [y/N] " answer
+      case "$answer" in [yY]*) want=1 ;; *) want=0 ;; esac
+    else
+      want=0
+      echo "  · no claude-personal alias; for a personal subscription run again with --personal (or --no-personal to stop this note)"
+    fi
+  fi
+  if [ "$want" = 1 ]; then
+    rc="$(shell_rc)"
+    if [ -z "$rc" ]; then
+      warn "unknown shell (${SHELL:-none}): add this line to your shell's startup file yourself: $ALIAS_LINE"
+    else
+      backup "$rc"
+      printf '\n# >>> herdr-claude: personal Claude profile >>>\n%s\n# <<< herdr-claude <<<\n' "$ALIAS_LINE" >> "$rc"
+      ok "claude-personal alias → $rc (open a new terminal, or: source $rc)"
+      [ -d "$HOME/.claude-personal" ] \
+        || warn "next: run claude-personal, log in with the personal subscription, then run this installer again"
+    fi
+  else
+    ok "skipped (no personal subscription)"
+  fi
 fi
-grep -qs "claude-personal" "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null \
-  || warn "no claude-personal alias found; optional: alias claude-personal='CLAUDE_CONFIG_DIR=~/.claude-personal claude'"
 
 # ---------------------------------------------------------------- Herdr
 if [ "$HERDR" = 1 ]; then
