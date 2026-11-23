@@ -6,7 +6,10 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, props, run, theme, home, layout } from "herdr";
+import { panes, props, run, theme, home, layout, shared } from "herdr";
+
+// Sidebar animations on unless stilled with a click on the brand emblem.
+const motion = () => shared("mechanicus.motion") !== false;
 
 // Match the first visible tab frame, including the active child of a stack.
 function paneFrame(node) {
@@ -79,7 +82,7 @@ export default class Pane extends View {
       .on_hover((hovered, cx) => { this.hovered = hovered; cx.notify(); })
       .on_click(() => run("pane.focus", { pane }))
       .when(Boolean(pic), (el) => el.child(pic))
-      .child(div().flex_none().text_color(p.focused ? t.accent : t.dim).child("⚙"))
+      .child(svg("mods/chrome-mechanicus/gear.svg").size(12).flex_none().text_color(p.focused ? t.accent : t.dim).when(p.focused && motion(), g => g.spin(8000)))
       .child(div().flex_none().truncate().max_w(260).font_medium().text_color(t.foreground).child(name))
       .child(div().flex_1().truncate().text_color(t.dim).child(p.cwd ? `⟨ ${folder(p.cwd)} ⟩` : ""))
       .when(st === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))

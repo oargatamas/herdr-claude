@@ -10,7 +10,21 @@
 // Polls only while shown; gh answers are cached per branch and link.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
-import { exec, hc, spaces, panes, terminals, focused, layout, theme, window, home, checking } from "herdr";
+import { exec, hc, spaces, panes, terminals, focused, layout, theme, window, home, shared, checking } from "herdr";
+
+// Sidebar animations on unless stilled with a click on the brand emblem.
+const motion = () => shared("mechanicus.motion") !== false;
+// Header litanies, shown in turn.
+const LITANIES = [
+  "noospheric readings · read-only",
+  "the Omnissiah knows all",
+  "machine-spirit appeased",
+  "praise the Omnissiah",
+  "knowledge is power, guard it well",
+  "flesh is weak, the machine endures",
+];
+// Binharic cant for the ticker: fixed pseudo-random bytes, so the strings stay the same across renders.
+const CANT = Array.from({ length: 16 }, (_, i) => ((i * 197 + 89) % 256).toString(2).padStart(8, "0") + " " + ((i * 71 + 13) % 256).toString(16).padStart(2, "0").toUpperCase());
 
 const GIT_EVERY = 15_000;     // branch, dirty, ahead/behind, last commit
 const GH_TTL = 180_000;       // gh answers, per branch and per link
@@ -272,7 +286,8 @@ export default class Auspex extends View {
     const row = (label, value, color) => h_flex().gap(8).text_size(12)
       .child(div().w(78).flex_none().text_color(t.dim).child(label))
       .child(div().flex_1().min_w(0).truncate().text_color(color ?? t.foreground).child(value));
-    const plate = (text, color) => div().flex_none().px(4).border(1).border_color(color).text_color(color).text_size(10).child(text);
+    const plate = (text, color) => div().flex_none().px(4).border(1).border_color(color).text_color(color).text_size(10)
+      .when(text === "IN RITE" && motion(), (el) => el.loop("opacity", { from: 0.35, to: 1, period: 1200 })).child(text);
     // Clickable Jira chips for the keys in these texts (nothing without a known Jira site).
     const jira = (id, ...texts) => {
       const site = this.jiraSite, keys = site ? jiraKeys(...texts) : [];
@@ -362,10 +377,18 @@ export default class Auspex extends View {
     const sidebar = find(layout(), "sidebar");
     if ((sidebar?.size?.px ?? Infinity) < 160) // the sidebar rail: just the sigil
       return v_flex().size_full().items_center().pt(8).bg(t.chrome).border_t(1).border_color(t.input).text_color(t.accent).child("⚙");
-    return v_flex().size_full().min_h(0).bg(t.chrome).border_t(1).border_color(t.input)
+    const on = motion(), h = this.height ?? 0;
+    return v_flex().id("auspex-root").size_full().min_h(0).bg(t.chrome).border_t(1).border_color(t.input)
       .child(h_flex().h(32).flex_none().px(16).gap(8).items_center().border_b(1).border_color(t.input).text_size(12).text_color(t.accent)
         .child("+++ AUSPEX +++")
-        .child(div().flex_1().text_size(10).text_color(t.dim).truncate().child("noospheric readings · read-only")))
-      .child(div().id("auspex-scroll").flex_1().min_h(0).overflow_y_scrollbar().child(body));
+        .child(div().flex_1().min_w(0).text_size(10).text_color(t.dim).truncate()
+          .when(on, (el) => el.frames(LITANIES, 4200)).when(!on, (el) => el.child(LITANIES[0])))
+        .when(on, (el) => el.child(div().flex_none().text_size(9).text_color(t.border).frames(CANT, 160))))
+      .child(div().id("auspex-body").relative().flex_1().min_h(0)
+        .on_size_change((size, cx) => { if (Math.abs((this.height ?? 0) - size.height) > 1) { this.height = size.height; cx.notify(); } })
+        .child(div().id("auspex-scroll").size_full().overflow_y_scrollbar().child(body))
+        // Auspex scanner: a faint green line sweeping down and up the readings.
+        .when(on && h > 20, (el) => el.child(div().absolute().left(0).right(0).top(0).h(2).bg(t.done).opacity(0.18)
+          .loop("top", { from: 0, to: h - 2, period: 9000, easing: "linear" }))));
   }
 }
