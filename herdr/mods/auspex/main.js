@@ -2,13 +2,11 @@
 //   REPO-SPIRIT: git branch, upstream ahead/behind, dirty counts, last commit
 //   PULL-PETITIONS & CI: the PR of every session in the shown tab and PR links found in
 //     those terminals' text, with checks and review state (via gh)
-//   RITE OF TESTING: last pytest/vitest or hc test result (never runs tests)
-//   HERESIES TO PURGE: TODO/FIXME scan
 //   Jira keys (ABC-123) in branches and PR titles get a link to the Jira site seen in sessions
 //   DATA-LITANY: per-repo notes
 // AUSPEX: read-only engineering readings for the focused terminal's repository, in the
 // Mechanicus look. It never changes anything: git and gh are only asked questions
-// (git with --no-optional-locks), tests are never run, only their last results read.
+// (git with --no-optional-locks).
 // Polls only while shown; gh answers are cached per branch and link.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
@@ -16,12 +14,10 @@ import { exec, hc, spaces, panes, terminals, focused, layout, theme, window, hom
 
 const GIT_EVERY = 15_000;     // branch, dirty, ahead/behind, last commit
 const GH_TTL = 180_000;       // gh answers, per branch and per link
-const SLOW_TTL = 60_000;      // TODO scan and test results
 const MENTION_EVERY = 60_000; // re-read the shown tab's terminals for PR links
 const MENTION_LINES = 400;    // history lines read above each screen
 // GitHub pull requests, GitLab merge requests, Bitbucket pull requests.
 const PR_URL_RE = /https?:\/\/(?:github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+|gitlab\.[\w.-]+\/[\w./-]+?\/-\/merge_requests\/\d+|bitbucket\.org\/[\w.-]+\/[\w.-]+\/pull-requests\/\d+)/g;
-const TEST_RE = /(^|[\s/])(test|tests|pytest|vitest|jest|rspec|phpunit|mocha|ava|nextest|go test|cargo test|npm test|bun test|pnpm test|yarn test|make test|tox)\b/;
 
 const find = (node, id) => {
   if (node?.id === id) return node;
@@ -74,7 +70,6 @@ export default class Auspex extends View {
   init(_props, cx) {
     this.repo = null;          // { root, machine, branch, upstream, ahead, behind, staged, unstaged, untracked, conflicts, commit }
     this.cwdKey = null;
-    this.slow = {};            // root → { at, todos, todoCount, tests }
     this.busy = false;
     this.tabPrs = [];          // [{ key, sessions: [names], branch, cwd, pr, error }] for the shown tab
     this.prCache = {};         // machine|cwd|branch → { at, pr, error }
@@ -261,49 +256,11 @@ export default class Auspex extends View {
           this.notes.set_value(saved);
         }
         cx.notify();
-        await this.loadSlow(repo);
       } finally {
         this.busy = false;
         cx.notify();
       }
     });
-  }
-
-  async loadSlow(repo) {
-    const c = this.slow[repo.root];
-    if (c && Date.now() - c.at < SLOW_TTL) return;
-    const on = repo.machine, root = repo.root;
-    const todo = await sh("git", ["-C", root, "grep", "-n", "-I", "-E", "\\b(TODO|FIXME|HACK|XXX)\\b", "--", "."], { on, timeout: 8000 });
-    const lines = todo.code === 0 ? todo.stdout.split("\n").filter(Boolean) : [];
-    // Last test results the tools themselves left behind (read only, never run).
-    const probe = await sh("sh", ["-c",
-      'for f in .pytest_cache/v/cache/lastfailed node_modules/.vite/vitest/results.json node_modules/.vitest/results.json; do [ -f "$f" ] && echo "$f $(date -r "$f" +%s)"; done; true'],
-      { cwd: root, on });
-    let tests = null;
-    for (const line of probe.stdout.split("\n").filter(Boolean)) {
-      const i = line.lastIndexOf(" "), file = line.slice(0, i), at = +line.slice(i + 1) * 1000;
-      if (tests && tests.at >= at) continue;
-      const text = await sh("cat", [file], { cwd: root, on });
-      try {
-        const data = JSON.parse(text.stdout || "{}");
-        if (file.includes("pytest")) {
-          const failed = Object.keys(data).length;
-          tests = { tool: "pytest", at, failed, ok: failed === 0 };
-        } else {
-          const results = Object.values(data.results ?? {});
-          const failed = results.filter((r) => r?.failed).length;
-          tests = { tool: "vitest", at, failed, total: results.length, ok: failed === 0 };
-        }
-      } catch {}
-    }
-    // A test command hc ran in this repository (e.g. `hc run --bg --name test bun test`).
-    for (const term of terminals()) {
-      const cmd = (term.argv ?? []).join(" ");
-      if (term.state !== "finished" || !TEST_RE.test(cmd) || !(term.cwd ?? "").startsWith(root)) continue;
-      const at = term.finished_ms ?? 0;
-      if (!tests || at > tests.at) tests = { tool: cmd.replace(/^.*?(\S+ test\b|\S*test\S*)/, "$1").slice(0, 40), at, ok: term.exit_code === 0, code: term.exit_code };
-    }
-    this.slow[root] = { at: Date.now(), todoCount: lines.length, todos: lines.slice(0, 8), tests };
   }
 
   render() {
@@ -326,7 +283,7 @@ export default class Auspex extends View {
         .child(`◆ ${k}`));
     };
 
-    const r = this.repo, slow = r?.root ? this.slow[r.root] : null;
+    const r = this.repo;
     const body = v_flex().px(16).pb(14);
 
     // ── Repository
@@ -391,31 +348,6 @@ export default class Auspex extends View {
           .child(h_flex().gap(4).items_center()
             .child(div().flex_1().min_w(0).text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${path}`))
             .children(jira(`mp-${m.url}`, pr?.title))));
-      }
-    }
-
-    // ── Tests
-    if (r?.root) {
-      body.child(heading("☩", "RITE OF TESTING", ""));
-      const tests = slow?.tests;
-      if (!slow) body.child(row("last", "…", t.dim));
-      else if (!tests) body.child(row("last", "no recorded rite (pytest/vitest cache, hc runs)", t.dim));
-      else body.child(h_flex().gap(6).items_center().text_size(12)
-        .child(div().w(78).flex_none().text_color(t.dim).child("last"))
-        .child(plate(tests.ok ? "BLESSED" : "CORRUPTED", tests.ok ? t.done : t.blocked))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.muted)
-          .child(`${tests.tool}${tests.failed ? ` · ${tests.failed} failed` : ""}${tests.total ? `/${tests.total}` : ""}${tests.code != null && !tests.ok ? ` · exit ${tests.code}` : ""} · ${ago(tests.at)}`)));
-    }
-
-    // ── TODOs
-    if (r?.root) {
-      body.child(heading("◈", "HERESIES TO PURGE", slow ? `${slow.todoCount} TODO/FIXME` : "…"));
-      for (const line of slow?.todos ?? []) {
-        const m = line.match(/^([^:]+):(\d+):(.*)$/);
-        if (!m) continue;
-        body.child(v_flex().py(1)
-          .child(div().text_size(10.5).text_color(t.dim).truncate().child(`${m[1]}:${m[2]}`))
-          .child(div().text_size(11.5).text_color(t.muted).truncate().child(m[3].trim())));
       }
     }
 
