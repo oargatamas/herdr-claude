@@ -202,14 +202,10 @@
     12,
     16
   ],
-  "theme": "graphite",
+  "theme": "mechanicus-grey",
   "ui_font": "Share Tech Mono",
   "font": "JetBrains Mono",
   "font_weight": 500,
   "terminal_opacity": 0.2,
-  "colors": {
-    "accent": "#e8a33d",
-    "accent_foreground": "#101114",
-    "working": "#e8a33d"
-  }
+  "preview": "layouts/mechanicus-grey.svg"
 }
