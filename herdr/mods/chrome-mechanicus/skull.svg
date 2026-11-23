@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 12 36 40" width="36" height="40">
+  <!-- The emblem's skull alone (half bone, half machine), shown inside the spinning gear. -->
+  <defs>
+    <clipPath id="l"><rect x="0" y="0" width="32" height="64"/></clipPath>
+    <clipPath id="r"><rect x="32" y="0" width="32" height="64"/></clipPath>
+  </defs>
+  <g clip-path="url(#l)">
+    <path d="M32 15 C22 15 17 22 17 29 C17 34 19 37 22 39 L22 45 L42 45 L42 39 C45 37 47 34 47 29 C47 22 42 15 32 15 Z" fill="#e9dcc0"/>
+    <ellipse cx="26" cy="30" rx="4.2" ry="4.6" fill="#0b0f09"/>
+    <path d="M32 34 L30 38 L32 38 Z" fill="#0b0f09"/>
+    <path d="M24 45 V49 M28 45 V49" stroke="#e9dcc0" stroke-width="2.5"/>
+  </g>
+  <g clip-path="url(#r)">
+    <path d="M32 15 C22 15 17 22 17 29 C17 34 19 37 22 39 L22 45 L42 45 L42 39 C45 37 47 34 47 29 C47 22 42 15 32 15 Z" fill="#7d8a7a"/>
+    <path d="M32 21 H45 M32 26 H46 M40 15 V45" stroke="#4a5648" stroke-width="1.2"/>
+    <circle cx="38" cy="30" r="4.6" fill="#0b0f09" stroke="#c48a2c" stroke-width="1.2"/>
+    <path d="M32 34 L34 38 L32 38 Z" fill="#0b0f09"/>
+    <path d="M36 45 V49 M40 45 V49" stroke="#7d8a7a" stroke-width="2.5"/>
+  </g>
+  <path d="M32 14 V50" stroke="#0b0f09" stroke-width="1"/>
+</svg>

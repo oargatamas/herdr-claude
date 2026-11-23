@@ -6,6 +6,9 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+
+// Sidebar animations on unless stilled with a click on the brand emblem.
+const motion = () => shared("mechanicus.motion") !== false;
 import { profilesIn, badge } from "./profile.js";
 
 function find(node, id) {
@@ -542,7 +545,10 @@ export default class Spaces extends View {
     return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
       .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11.5).text_color(t.dim)
         .when(collapsed, el => el.pl(0).pr(0).justify_center())
-        .when(!collapsed, el => el.child(div().text_color(t.accent).child("⚙ COGITATOR NODES ⚙")))
+        .when(!collapsed, el => el.child(h_flex().gap(5).items_center().text_color(t.accent)
+          .child(svg("mods/chrome-mechanicus/gear.svg").size(11).when(motion(), g => g.spin(9000)))
+          .child("COGITATOR NODES")
+          .child(svg("mods/chrome-mechanicus/gear.svg").size(11).when(motion(), g => g.spin(6000)))))
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
       .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).pb(14).overflow_y_scrollbar().mode("always").track_scroll(this.scroll)

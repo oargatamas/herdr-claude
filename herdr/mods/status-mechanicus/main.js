@@ -1,6 +1,9 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, agents, theme, run, window, keys } from "herdr";
+import { spaces, agents, theme, run, window, keys, shared } from "herdr";
+
+// Sidebar animations on unless stilled with a click on the brand emblem.
+const motion = () => shared("mechanicus.motion") !== false;
 
 export default class WorkspaceStatus extends View {
   // The palette key as actually bound, not a hardcoded one; without a
@@ -24,7 +27,7 @@ export default class WorkspaceStatus extends View {
       .child(div().flex_none().text_color(t.accent).child("✠ COGITATOR"))
       .child(label(space?.machine ? "server" : "monitor", space?.machine ?? "This computer"))
       .when(Boolean(space?.branch), el => el.child(label("branch", space.branch)))
-      .child(h_flex().gap(6).items_center().child(div().size(6).rounded(0).bg(list.some(a => a.status === "working") ? t.working : t.dim)).child(`${list.length} agents`)
+      .child(h_flex().gap(6).items_center().child(div().size(6).rounded(0).bg(list.some(a => a.status === "working") ? t.working : t.dim).when(motion() && list.some(a => a.status === "working"), el => el.loop("opacity", { from: 0.25, to: 1, period: 1100 }))).child(`${list.length} agents`)
         .when(needs > 0, el => el.child(div().text_color(t.blocked).child(`· ⚠ ${needs} needs you`))))
       .child(div().flex_1())
       .child(div().flex_none().text_color(t.dim).child("+++ THE OMNISSIAH PROVIDES +++"))

@@ -4,6 +4,9 @@ import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout } from "herdr";
 
+// Sidebar animations on unless stilled with a click on the brand emblem.
+const motion = () => shared("mechanicus.motion") !== false;
+
 function find(node, id) {
   if (node?.id === id) return node;
   for (const child of node?.children ?? []) {
@@ -428,7 +431,9 @@ export default class Agents extends View {
             .flex_none()
             .items_center()
             .justify_between()
-            .child(div().text_size(11.5).font_medium().text_color(t.accent).child("☠ SERVITORS"))
+            .child(h_flex().gap(5).items_center().text_size(11.5).font_medium().text_color(t.accent)
+              .child(div().when(motion() && list.some((a) => a.status === "working"), (el) => el.loop("opacity", { from: 0.3, to: 1, period: 1400 })).child("☠"))
+              .child("SERVITORS"))
             .child(
               div()
                 .id("ag-sort")

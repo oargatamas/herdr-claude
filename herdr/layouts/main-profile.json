@@ -119,7 +119,10 @@
                     "height": 30,
                     "position": "top"
                   },
-                  "background": "background",
+                  "background": {
+                    "image": "backgrounds/mechanicus-terminal.png",
+                    "fit": "cover"
+                  },
                   "border": {
                     "width": 1,
                     "color": "border"
@@ -208,5 +211,6 @@
   "theme": "mechanicus",
   "ui_font": "Share Tech Mono",
   "font": "JetBrains Mono",
-  "font_weight": 500
+  "font_weight": 500,
+  "terminal_opacity": 0.55
 }
