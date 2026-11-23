@@ -69,7 +69,11 @@
       "min": 44,
       "max": 480,
       "background": "chrome",
-      "resizable": false
+      "resizable": false,
+      "border": {
+        "width": 1,
+        "color": "input"
+      }
     },
     {
       "id": "work",
@@ -110,11 +114,11 @@
                     "color": "border"
                   },
                   "focus": {
-                    "width": 1,
+                    "width": 2,
                     "color": "accent"
                   },
-                  "radius": 10,
-                  "gap": 8,
+                  "radius": 0,
+                  "gap": 6,
                   "lone": true
                 }
               }
@@ -170,18 +174,28 @@
       "resizable": false
     }
   ],
-  "background": "canvas",
+  "background": {
+    "gradient": [
+      "#0b1a09",
+      "#020302"
+    ],
+    "angle": 180
+  },
   "terminal_padding": [
     14,
     12
   ],
   "divider": {
     "width": 1,
-    "color": "border"
+    "color": "input"
   },
   "titlebar": "none",
   "traffic_lights": [
     12,
     16
-  ]
+  ],
+  "theme": "mechanicus",
+  "ui_font": "Share Tech Mono",
+  "font": "JetBrains Mono",
+  "font_weight": 500
 }
