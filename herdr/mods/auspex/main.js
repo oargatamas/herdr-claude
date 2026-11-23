@@ -1,5 +1,6 @@
 // AUSPEX sections:
-//   REPO-SPIRIT: git branch, upstream ahead/behind, dirty counts, last commit
+//   REPO-SPIRIT: git branch, upstream ahead/behind, dirty counts, last commit (icon: full
+//     message in a dialog), submodules with their state and branch (found for detached commits)
 //   PULL-PETITIONS & CI: the PR of every session in the shown tab and PR links found in
 //     those terminals' text, with checks and review state (via gh)
 //   Jira keys (ABC-123) in branches and PR titles get a link to the Jira site seen in sessions
@@ -10,7 +11,7 @@
 // Polls only while shown; gh answers are cached per branch and link.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
-import { exec, hc, spaces, panes, terminals, focused, layout, theme, window, home, shared, checking } from "herdr";
+import { exec, hc, spaces, panes, terminals, focused, layout, theme, window, home, shared, props, openOverlay, closeOverlay, checking } from "herdr";
 
 // Sidebar animations on unless stilled with a click on the brand emblem.
 const motion = () => shared("mechanicus.motion") !== false;
@@ -80,8 +81,56 @@ async function sh(cmd, args, opts) {
   catch (e) { return { code: -1, stdout: "", stderr: String(e?.message ?? e) }; }
 }
 
+const SUB_EVERY = 30_000;     // submodule details, per repository
+
+// The branch a checkout is on; for a detached commit, a branch pointing at it, else the
+// nearest branch containing it (git name-rev, e.g. "origin/main~3": 3 commits below its tip).
+async function branchOf(dir, on) {
+  const head = await sh("git", ["-C", dir, "symbolic-ref", "-q", "--short", "HEAD"], { on });
+  if (head.code === 0 && head.stdout.trim()) return { name: head.stdout.trim(), detached: false };
+  const at = await sh("git", ["-C", dir, "for-each-ref", "--points-at", "HEAD", "--format=%(refname:short)", "refs/heads", "refs/remotes"], { on });
+  const refs = at.stdout.split("\n").map((x) => x.trim()).filter((x) => x && !x.endsWith("/HEAD"));
+  if (refs.length) return { name: refs[0], detached: true };
+  const nr = await sh("git", ["-C", dir, "name-rev", "--name-only", "--no-undefined", "--exclude=tags/*", "HEAD"], { on });
+  const name = nr.code === 0 ? nr.stdout.trim().replace(/^remotes\//, "") : "";
+  return { name: name || null, detached: true };
+}
+
+// Dirty counts and upstream from `git status --porcelain=v2 --branch`.
+function parseStatus(text, into) {
+  Object.assign(into, { staged: 0, unstaged: 0, untracked: 0, conflicts: 0, ahead: 0, behind: 0 });
+  for (const line of text.split("\n")) {
+    if (line.startsWith("# branch.head ")) into.head = line.slice(14);
+    else if (line.startsWith("# branch.upstream ")) into.upstream = line.slice(18);
+    else if (line.startsWith("# branch.ab ")) { const m = line.match(/\+(\d+) -(\d+)/); if (m) { into.ahead = +m[1]; into.behind = +m[2]; } }
+    else if (line.startsWith("? ")) into.untracked++;
+    else if (line.startsWith("u ")) into.conflicts++;
+    else if (/^[12] /.test(line)) { const xy = line.slice(2, 4); if (xy[0] !== ".") into.staged++; if (xy[1] !== ".") into.unstaged++; }
+  }
+  return into;
+}
+
+async function lastCommit(dir, on) {
+  const log = await sh("git", ["-C", dir, "log", "-1", "--format=%h\u0001%s\u0001%ct"], { on });
+  const [hash, subject, ct] = log.stdout.trim().split("\u0001");
+  return hash ? { hash, subject, at: (+ct) * 1000 } : null;
+}
+
 export default class Auspex extends View {
   init(_props, cx) {
+    // Opened as the commit dialog: { commit: { dir, on, hash, branch, label } }.
+    const spec = props()?.commit;
+    if (spec) {
+      this.dialog = spec;
+      cx.spawn(async (cx) => {
+        const r = await sh("git", ["-C", spec.dir, "show", "-s", "--format=%H%x01%an <%ae>%x01%ad%x01%B", "--date=format:%Y-%m-%d %H:%M", spec.hash], { on: spec.on });
+        const [full, author, date, ...msg] = r.stdout.split("\u0001");
+        this.full = r.code === 0 ? { full, author, date, message: msg.join("\u0001").replace(/\s+$/, "") } : { error: (r.stderr || "git failed").trim() };
+        cx.notify();
+      });
+      return;
+    }
+    this.subs = {};            // root → { at, list: [{ path, mark, recorded, ...status, branch, commit }] }
     this.repo = null;          // { root, machine, branch, upstream, ahead, behind, staged, unstaged, untracked, conflicts, commit }
     this.cwdKey = null;
     this.busy = false;
@@ -247,21 +296,13 @@ export default class Auspex extends View {
         const top = await sh("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { on });
         if (top.code !== 0) { this.repo = { root: null, cwd, machine: on }; return; }
         const root = top.stdout.trim();
-        const [st, log] = await Promise.all([
+        const [st, commit] = await Promise.all([
           sh("git", ["--no-optional-locks", "-C", root, "status", "--porcelain=v2", "--branch"], { on }),
-          sh("git", ["-C", root, "log", "-1", "--format=%h\u0001%s\u0001%ct"], { on }),
+          lastCommit(root, on),
         ]);
-        const repo = { root, machine: on, staged: 0, unstaged: 0, untracked: 0, conflicts: 0, ahead: 0, behind: 0 };
-        for (const line of st.stdout.split("\n")) {
-          if (line.startsWith("# branch.head ")) repo.branch = line.slice(14);
-          else if (line.startsWith("# branch.upstream ")) repo.upstream = line.slice(18);
-          else if (line.startsWith("# branch.ab ")) { const m = line.match(/\+(\d+) -(\d+)/); if (m) { repo.ahead = +m[1]; repo.behind = +m[2]; } }
-          else if (line.startsWith("? ")) repo.untracked++;
-          else if (line.startsWith("u ")) repo.conflicts++;
-          else if (/^[12] /.test(line)) { const xy = line.slice(2, 4); if (xy[0] !== ".") repo.staged++; if (xy[1] !== ".") repo.unstaged++; }
-        }
-        const [h, s, ct] = log.stdout.trim().split("\u0001");
-        if (h) repo.commit = { hash: h, subject: s, at: (+ct) * 1000 };
+        const repo = parseStatus(st.stdout, { root, machine: on, commit });
+        repo.branch = repo.head;
+        if (repo.head === "(detached)") { const b = await branchOf(root, on); repo.branch = null; repo.detachedOn = b.name; }
         this.repo = repo;
         if (root !== this.notesRoot) {
           this.notesRoot = root;
@@ -270,6 +311,7 @@ export default class Auspex extends View {
           this.notes.set_value(saved);
         }
         cx.notify();
+        await this.loadSubs(root, on);
       } finally {
         this.busy = false;
         cx.notify();
@@ -277,7 +319,57 @@ export default class Auspex extends View {
     });
   }
 
+  // Submodules (recursive): recorded vs checked-out commit, dirty counts, branch, last commit.
+  async loadSubs(root, on) {
+    const c = this.subs[root];
+    if (c && Date.now() - c.at < SUB_EVERY) return;
+    const st = await sh("git", ["-C", root, "submodule", "status", "--recursive"], { on });
+    const list = [];
+    for (const line of st.stdout.split("\n")) {
+      const m = line.match(/^([ +\-U])([0-9a-f]+) (\S+)/);
+      if (m) list.push({ mark: m[1], recorded: m[2].slice(0, 7), path: m[3] });
+    }
+    await Promise.all(list.slice(0, 16).map(async (x) => {
+      if (x.mark === "-") return; // not initialized: nothing checked out to read
+      const dir = `${root}/${x.path}`;
+      const [s, commit, branch] = await Promise.all([
+        sh("git", ["--no-optional-locks", "-C", dir, "status", "--porcelain=v2", "--branch"], { on }),
+        lastCommit(dir, on),
+        branchOf(dir, on),
+      ]);
+      parseStatus(s.stdout, x);
+      Object.assign(x, { dir, commit, branch });
+    }));
+    this.subs[root] = { at: Date.now(), list };
+  }
+
+  // Full commit message in a dialog (this mod, opened again with props.commit).
+  showCommit(dir, on, commit, label) {
+    openOverlay({ mod: "auspex", kind: "dialog", width: 620, height: 440, props: { commit: { dir, on, hash: commit.hash, label } } });
+  }
+
+  renderDialog() {
+    const t = theme(), d = this.dialog, f = this.full;
+    const meta = (k, v) => h_flex().gap(8).text_size(12).child(div().w(64).flex_none().text_color(t.dim).child(k)).child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(v ?? ""));
+    const lines = (f?.message ?? "").split("\n");
+    return v_flex().size_full().bg(t.popover).border(1).border_color(t.accent)
+      .child(h_flex().h(36).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.input).text_color(t.accent).text_size(12)
+        .child(svg("mods/chrome-mechanicus/gear.svg").size(13).when(motion(), (g) => g.spin(9000)))
+        .child(`DATA-SCROLL · ${d.label ?? ""} · ${d.hash}`).child(div().flex_1())
+        .child(div().id("close-scroll").px(6).cursor_pointer().text_color(t.dim).hover((el) => el.text_color(t.foreground))
+          .on_click(() => closeOverlay(props().overlay)).child(svg("mods/chrome-mechanicus/x.svg").size(13))))
+      .child(!f ? div().p(14).text_size(12).text_color(t.dim).child("consulting the archive…")
+        : f.error ? div().p(14).text_size(12).text_color(t.blocked).child(f.error)
+        : v_flex().flex_1().min_h(0).p(14).gap(3)
+          .child(meta("commit", f.full)).child(meta("author", f.author)).child(meta("date", f.date))
+          .child(div().h(1).my(8).bg(t.border))
+          .child(div().id("scroll-body").flex_1().min_h(0).overflow_y_scrollbar()
+            .child(v_flex().gap(2).text_size(12.5).text_color(t.foreground)
+              .children(lines.map((l, i) => l.trim() ? div().whitespace_normal().text_color(i === 0 ? t.accent : t.foreground).child(l) : div().h(8))))));
+  }
+
   render() {
+    if (this.dialog) return this.renderDialog();
     const t = theme();
     const tone = (s) => ({ pass: t.done, fail: t.blocked, pending: t.working, idle: t.dim }[s] ?? t.dim);
     const word = (s) => ({ pass: "BLESSED", fail: "CORRUPTED", pending: "IN RITE", idle: "DORMANT" }[s] ?? "—");
@@ -286,6 +378,14 @@ export default class Auspex extends View {
     const row = (label, value, color) => h_flex().gap(8).text_size(12)
       .child(div().w(78).flex_none().text_color(t.dim).child(label))
       .child(div().flex_1().min_w(0).truncate().text_color(color ?? t.foreground).child(value));
+    // A commit line with an icon that opens the full message.
+    const commitRow = (label, id, dir, on, c, name) => h_flex().gap(8).text_size(label ? 12 : 11).items_center()
+      .when(Boolean(label), (el) => el.child(div().w(78).flex_none().text_color(t.dim).child(label)))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(`${c.hash} ${c.subject} · ${ago(c.at)}`))
+      .child(div().id(`${id}-msg`).flex_none().p(1).cursor_pointer().text_color(t.dim)
+        .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Read the full commit message")
+        .on_click((_e, cx) => { cx.stop_propagation(); this.showCommit(dir, on, c, name); })
+        .child(svg("mods/chrome-mechanicus/file-text.svg").size(12)));
     const plate = (text, color) => div().flex_none().px(4).border(1).border_color(color).text_color(color).text_size(10)
       .when(text === "IN RITE" && motion(), (el) => el.loop("opacity", { from: 0.35, to: 1, period: 1200 })).child(text);
     // Clickable Jira chips for the keys in these texts (nothing without a known Jira site).
@@ -308,11 +408,32 @@ export default class Auspex extends View {
     else {
       const dirty = r.staged + r.unstaged + r.untracked + r.conflicts;
       body.child(row("repo", r.root.split("/").pop() + (r.machine ? ` @${r.machine}` : "")))
-        .child(row("branch", r.branch ?? "?", t.accent))
+        .child(row("branch", r.branch ?? (r.detachedOn ? `detached · on ${r.detachedOn}` : "detached"), r.branch ? t.accent : t.working))
         .when(jira("repo", r.branch).length > 0, (el) => el.child(h_flex().gap(4).pl(86).flex_wrap().children(jira("repo", r.branch))))
         .child(row("upstream", r.upstream ? `${r.upstream}  ↑${r.ahead} ↓${r.behind}` : "none bound", r.upstream ? (r.behind ? t.working : t.foreground) : t.dim))
         .child(row("state", dirty ? `+${r.staged} staged · ~${r.unstaged} changed · ?${r.untracked} new${r.conflicts ? ` · ✕${r.conflicts} conflict` : ""}` : "pure (clean)", r.conflicts ? t.blocked : dirty ? t.working : t.done))
-        .when(Boolean(r.commit), (el) => el.child(row("last", `${r.commit.hash} ${r.commit.subject} · ${ago(r.commit.at)}`, t.muted)));
+        .when(Boolean(r.commit), (el) => el.child(commitRow("last", "repo-last", r.root, r.machine, r.commit, r.root.split("/").pop())));
+      // Submodules
+      const subs = this.subs[r.root]?.list ?? [];
+      if (subs.length) {
+        body.child(div().text_size(10.5).text_color(t.dim).mt(6).mb(2).child(`SUBMODULES · ${subs.length}`));
+        const mark = { "+": ["MOVED", t.working, "checked-out commit differs from the one recorded here"], "-": ["UNINIT", t.dim, "not initialized"], "U": ["CONFLICT", t.blocked, "merge conflict"] };
+        for (const x of subs) {
+          const dirty = (x.staged ?? 0) + (x.unstaged ?? 0) + (x.untracked ?? 0) + (x.conflicts ?? 0);
+          const [word0, color0, why] = mark[x.mark] ?? (dirty ? ["DIRTY", t.working, "uncommitted changes"] : ["SYNCED", t.done, "at the recorded commit, clean"]);
+          const where = !x.branch ? (x.mark === "-" ? `recorded ${x.recorded}` : "")
+            : x.branch.detached ? (x.branch.name ? `detached · on ${x.branch.name}` : "detached · on no branch") : x.branch.name;
+          const updown = x.upstream ? ` ↑${x.ahead} ↓${x.behind}` : "";
+          body.child(v_flex().py(2)
+            .child(h_flex().gap(6).items_center().text_size(12)
+              .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(x.path))
+              .child(div().id(`sub-mark-${x.path}`).child(plate(word0, color0)).tooltip(why)))
+            .child(h_flex().gap(6).text_size(11).pl(8)
+              .child(div().flex_1().min_w(0).truncate().text_color(x.branch?.detached ? t.working : t.accent).child(`${where}${updown}`))
+              .when(dirty > 0, (el) => el.child(div().flex_none().text_color(t.working).child(`+${x.staged} ~${x.unstaged} ?${x.untracked}`))))
+            .when(Boolean(x.commit), (el) => el.child(div().pl(8).child(commitRow(null, `sub-last-${x.path}`, x.dir, r.machine, x.commit, x.path)))));
+        }
+      }
     }
 
     // ── PRs and CI
