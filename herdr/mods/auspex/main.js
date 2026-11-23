@@ -86,7 +86,7 @@ export default class Auspex extends View {
     return cwd ? `${space?.machine ?? ""}\u0000${cwd}` : null;
   }
 
-  refresh(cx, force = false) {
+  refresh(cx) {
     if (this.busy) return;
     this.busy = true;
     const key = this.focusKey();
@@ -123,7 +123,7 @@ export default class Auspex extends View {
           this.notes.set_value(saved);
         }
         cx.notify();
-        await Promise.all([this.loadGh(repo, force), this.loadSlow(repo, force)]);
+        await Promise.all([this.loadGh(repo), this.loadSlow(repo)]);
       } finally {
         this.busy = false;
         cx.notify();
@@ -131,9 +131,9 @@ export default class Auspex extends View {
     });
   }
 
-  async loadGh(repo, force) {
+  async loadGh(repo) {
     const c = this.gh[repo.root];
-    if (!force && c && Date.now() - c.at < GH_TTL) return;
+    if (c && Date.now() - c.at < GH_TTL) return;
     const on = repo.machine, cwd = repo.root;
     const [prs, runs] = await Promise.all([
       sh("gh", ["pr", "list", "--limit", "6", "--json", "number,title,isDraft,headRefName,reviewDecision,statusCheckRollup,author"], { cwd, on }),
@@ -147,9 +147,9 @@ export default class Auspex extends View {
     this.gh[repo.root] = entry;
   }
 
-  async loadSlow(repo, force) {
+  async loadSlow(repo) {
     const c = this.slow[repo.root];
-    if (!force && c && Date.now() - c.at < SLOW_TTL) return;
+    if (c && Date.now() - c.at < SLOW_TTL) return;
     const on = repo.machine, root = repo.root;
     const todo = await sh("git", ["-C", root, "grep", "-n", "-I", "-E", "\\b(TODO|FIXME|HACK|XXX)\\b", "--", "."], { on, timeout: 8000 });
     const lines = todo.code === 0 ? todo.stdout.split("\n").filter(Boolean) : [];
@@ -292,10 +292,7 @@ export default class Auspex extends View {
     return v_flex().size_full().min_h(0).bg(t.chrome).border_l(1).border_color(t.input)
       .child(h_flex().h(34).flex_none().px(12).gap(8).items_center().border_b(1).border_color(t.input).text_size(12).text_color(t.accent)
         .child("+++ AUSPEX +++")
-        .child(div().flex_1().text_size(10).text_color(t.dim).truncate().child("noospheric readings · read-only"))
-        .child(div().id("auspex-refresh").px(6).border(1).border_color(t.border).text_size(10).text_color(t.muted).cursor_pointer()
-          .hover((s) => s.text_color(t.accent).border_color(t.accent))
-          .on_click((_e, cx) => this.refresh(cx, true)).child("RE-SCAN")))
+        .child(div().flex_1().text_size(10).text_color(t.dim).truncate().child("noospheric readings · read-only")))
       .child(div().id("auspex-scroll").flex_1().min_h(0).overflow_y_scrollbar().child(body));
   }
 }
