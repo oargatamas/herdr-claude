@@ -123,7 +123,8 @@ branch, merged and cleaned up by `hc-worker stop` and `hc-worker prune`.
 | `herdr/shared/profile.js` | The badge code, copied into both |
 | `herdr/mods/help-plus/` | Copy of Herdr's keybinds dialog with the Claude section |
 | `herdr/layouts/main-profile.json` | Copy of Herdr's `main` layout using the two copies above, with the Mechanicus look (theme, fonts, square frames) |
-| `herdr/mods/auspex/` | AUSPEX panel (tab bar button, right panel): focused repo's branch, dirty state, ahead/behind, last commit; open PRs with CI and review state and the branch's latest CI run (gh, cached 3 min); last test result left by pytest/vitest or an `hc` test run; agents overview; TODO/FIXME scan; per-repo notes. Read-only, polls only while shown, no manual refresh |
+| `herdr/mods/auspex/` | AUSPEX, always shown in the left sidebar between Spaces and Servitors: focused repo's branch, dirty state, ahead/behind, last commit; open PRs with CI and review state and the branch's latest CI run (gh, cached 3 min); last test result left by pytest/vitest or an `hc` test run; TODO/FIXME scan; per-repo notes. Read-only, polls only while shown, no manual refresh |
+| `herdr/mods/servitors-mechanicus/` | Copy of Herdr's `agents` mod (all its features: grouping, sort, pin, peek, history, sub-agents), restyled as SERVITORS |
 | `herdr/mods/status-mechanicus/`, `pane-mechanicus/`, `chrome-mechanicus/` | Copies of Herdr's `workspace-status`, `pane` and `workspace-chrome` (sidebar brand and footer) mods, restyled only; `chrome-mechanicus/cog-skull.svg` is the cog-and-skull emblem in the brand block |
 | `herdr/themes/mechanicus.json` | Adeptus Mechanicus cogitator theme: phosphor green on black, brass accents, forge-red buttons |
 | `herdr/mods/spaces-profile/fonts/` | Share Tech Mono (OFL), the UI font of the Mechanicus look |

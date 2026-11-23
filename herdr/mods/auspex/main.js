@@ -4,7 +4,7 @@
 // Polls only while its panel is shown; gh answers are cached per repository.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
-import { exec, spaces, agents, terminals, focused, layout, theme, run, checking } from "herdr";
+import { exec, spaces, terminals, focused, layout, theme, checking } from "herdr";
 
 const GIT_EVERY = 15_000;     // branch, dirty, ahead/behind, last commit
 const GH_TTL = 180_000;       // pull requests and CI runs, per repository
@@ -74,10 +74,11 @@ export default class Auspex extends View {
     this.refresh(cx);
   }
 
+  // In the sidebar: shown unless the auspex block or the sidebar is hidden, or the sidebar is a rail.
   visible() {
-    const root = layout(), panel = find(root, "panel"), body = find(root, "panel-body");
-    if (!panel) return true; // shown in another layout or a window
-    return !panel.hidden && body?.active === "auspex";
+    const root = layout(), me = find(root, "auspex"), sidebar = find(root, "sidebar");
+    if (!me) return true; // shown in another layout or a window
+    return !me.hidden && !sidebar?.hidden && (sidebar?.size?.px ?? Infinity) >= 160;
   }
 
   focusKey() {
@@ -196,7 +197,7 @@ export default class Auspex extends View {
     const plate = (text, color) => div().flex_none().px(4).border(1).border_color(color).text_color(color).text_size(10).child(text);
 
     const r = this.repo, gh = r?.root ? this.gh[r.root] : null, slow = r?.root ? this.slow[r.root] : null;
-    const body = v_flex().px(12).pb(14);
+    const body = v_flex().px(16).pb(14);
 
     // ── Repository
     body.child(heading("⚙", "REPO-SPIRIT", this.busy ? "consulting…" : ""));
@@ -250,25 +251,6 @@ export default class Auspex extends View {
           .child(`${tests.tool}${tests.failed ? ` · ${tests.failed} failed` : ""}${tests.total ? `/${tests.total}` : ""}${tests.code != null && !tests.ok ? ` · exit ${tests.code}` : ""} · ${ago(tests.at)}`)));
     }
 
-    // ── Agents and terminals
-    const list = agents(), live = terminals().filter((x) => x.state === "live").length;
-    const count = (s) => list.filter((a) => a.status === s).length;
-    body.child(heading("☠", "SERVITORS", `${live} terminals`));
-    body.child(h_flex().gap(6).mb(4).flex_wrap()
-      .child(plate(`WORKING ${count("working")}`, t.working))
-      .child(plate(`BLOCKED ${count("blocked")}`, t.blocked))
-      .child(plate(`DONE ${count("done")}`, t.done))
-      .child(plate(`IDLE ${count("idle")}`, t.idle)));
-    const order = { blocked: 0, working: 1, done: 2, idle: 3 };
-    for (const a of [...list].sort((x, y) => (order[x.status] ?? 9) - (order[y.status] ?? 9)).slice(0, 8)) {
-      const where = spaces().find((s) => s.id === a.space)?.name ?? "";
-      body.child(h_flex().id(`agent-${a.terminal}`).gap(6).items_center().text_size(12).py(1).px(2).cursor_pointer()
-        .hover((s) => s.bg(t.hover)).on_click(() => run("agent.focus", { terminal: a.terminal }))
-        .child(div().size(6).flex_none().bg(t[a.status] ?? t.dim))
-        .child(div().w(90).flex_none().truncate().text_color(t.foreground).child(where))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(a.title || a.program?.name || a.terminal)));
-    }
-
     // ── TODOs
     if (r?.root) {
       body.child(heading("◈", "HERESIES TO PURGE", slow ? `${slow.todoCount} TODO/FIXME` : "…"));
@@ -286,11 +268,14 @@ export default class Auspex extends View {
       body.child(heading("✎", "DATA-LITANY (NOTES)", ""));
       body.child(div().id("notes").border(1).border_color(t.border).bg(t.background).p(6).text_size(12).text_color(t.foreground)
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        .child(Textarea.new(this.notes).h(120).w_full()));
+        .child(Textarea.new(this.notes).h(90).w_full()));
     }
 
-    return v_flex().size_full().min_h(0).bg(t.chrome).border_l(1).border_color(t.input)
-      .child(h_flex().h(34).flex_none().px(12).gap(8).items_center().border_b(1).border_color(t.input).text_size(12).text_color(t.accent)
+    const sidebar = find(layout(), "sidebar");
+    if ((sidebar?.size?.px ?? Infinity) < 160) // the sidebar rail: just the sigil
+      return v_flex().size_full().items_center().pt(8).bg(t.chrome).border_t(1).border_color(t.input).text_color(t.accent).child("⚙");
+    return v_flex().size_full().min_h(0).bg(t.chrome).border_t(1).border_color(t.input)
+      .child(h_flex().h(32).flex_none().px(16).gap(8).items_center().border_b(1).border_color(t.input).text_size(12).text_color(t.accent)
         .child("+++ AUSPEX +++")
         .child(div().flex_1().text_size(10).text_color(t.dim).truncate().child("noospheric readings · read-only")))
       .child(div().id("auspex-scroll").flex_1().min_h(0).overflow_y_scrollbar().child(body));
