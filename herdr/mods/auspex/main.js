@@ -1,6 +1,7 @@
 // AUSPEX sections:
 //   REPO-SPIRIT: git branch, upstream ahead/behind, dirty counts, last commit
-//   PULL-PETITIONS & CI: the PR of every session in the shown tab (with links), open PRs,
+//   PULL-PETITIONS & CI: the PR of every session in the shown tab (with links), PR links
+//     found in those terminals' text, open PRs,
 //     checks, review state, branch's latest CI run (via gh)
 //   RITE OF TESTING: last pytest/vitest or hc test result (never runs tests)
 //   HERESIES TO PURGE: TODO/FIXME scan
@@ -11,11 +12,15 @@
 // Polls only while its panel is shown; gh answers are cached per repository.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
-import { exec, spaces, panes, terminals, focused, layout, theme, window, home, checking } from "herdr";
+import { exec, hc, spaces, panes, terminals, focused, layout, theme, window, home, checking } from "herdr";
 
 const GIT_EVERY = 15_000;     // branch, dirty, ahead/behind, last commit
 const GH_TTL = 180_000;       // pull requests and CI runs, per repository
 const SLOW_TTL = 60_000;      // TODO scan and test results
+const MENTION_EVERY = 60_000; // re-read the shown tab's terminals for PR links
+const MENTION_LINES = 400;    // history lines read above each screen
+// GitHub pull requests, GitLab merge requests, Bitbucket pull requests.
+const PR_URL_RE = /https?:\/\/(?:github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+|gitlab\.[\w.-]+\/[\w./-]+?\/-\/merge_requests\/\d+|bitbucket\.org\/[\w.-]+\/[\w.-]+\/pull-requests\/\d+)/g;
 const TEST_RE = /(^|[\s/])(test|tests|pytest|vitest|jest|rspec|phpunit|mocha|ava|nextest|go test|cargo test|npm test|bun test|pnpm test|yarn test|make test|tox)\b/;
 
 const find = (node, id) => {
@@ -69,6 +74,8 @@ export default class Auspex extends View {
     this.busy = false;
     this.tabPrs = [];          // [{ key, sessions: [names], branch, cwd, pr, error }] for the shown tab
     this.prCache = {};         // machine|cwd|branch → { at, pr, error }
+    this.mentions = [];        // [{ url, sessions: [names], pr }] PR links seen in the shown tab's terminals
+    this.urlCache = {};        // url → { at, pr }
     this.tabKeyNow = null;
     this.tabBusy = false;
     this.notesRoot = null;
@@ -85,7 +92,7 @@ export default class Auspex extends View {
       const key = this.focusKey();
       if (key !== this.cwdKey || Date.now() - (this.gitAt ?? 0) > GIT_EVERY) this.refresh(cx);
       const tk = this.tabKey();
-      if (tk !== this.tabKeyNow || Date.now() - (this.tabAt ?? 0) > GH_TTL) this.loadTab(cx);
+      if (tk !== this.tabKeyNow || Date.now() - (this.tabAt ?? 0) > MENTION_EVERY) this.loadTab(cx);
     });
     this.refresh(cx);
     this.loadTab(cx);
@@ -115,7 +122,53 @@ export default class Auspex extends View {
         name: (p.program?.agent || p.program?.shell) && p.program.name ? p.program.name : p.title || p.terminal }));
   }
 
-  tabKey() { return this.tabSessions().map((x) => x.key).sort().join("\n"); }
+  tabKey() {
+    const f = focused();
+    const terms = panes().filter((p) => p.tab === f?.tab && p.terminal).map((p) => p.terminal).sort().join(",");
+    return `${f?.tab}|${terms}|` + this.tabSessions().map((x) => x.key).sort().join("\n");
+  }
+
+  // PR links in the shown tab's terminals: each screen (plus MENTION_LINES of history on a
+  // normal screen; full-screen apps are never scrolled) and, for a Claude session, its whole
+  // transcript (found by the herdr.claude-session / herdr.profile labels; read-only grep).
+  async scanMentions() {
+    const f = focused();
+    const space = spaces().find((s) => s.id === f?.space) ?? spaces().find((s) => s.active);
+    const tab = f?.tab ?? space?.tabs?.find((x) => x.active)?.id;
+    const found = new Map(); // url → names
+    for (const p of panes().filter((x) => x.tab === tab && x.terminal)) {
+      const r = await hc(["read", p.terminal, "--lines", String(p.scroll ? MENTION_LINES : 0)]).catch(() => null);
+      if (!r || r.code !== 0) continue;
+      const name = (p.program?.agent || p.program?.shell) && p.program.name ? p.program.name : p.title || p.terminal;
+      let text = r.stdout;
+      const labels = terminals().find((x) => x.address === p.terminal)?.labels ?? {};
+      const sid = labels["herdr.claude-session"];
+      if (sid && /^[\w-]+$/.test(sid)) {
+        const dir = labels["herdr.profile"] === "personal" ? "$HOME/.claude-personal" : "$HOME/.claude";
+        const g = await sh("sh", ["-c", `grep -ohE 'https?://[^"\\\\ )<>]+/(pull|merge_requests|pull-requests)/[0-9]+' ${dir}/projects/*/"$1".jsonl 2>/dev/null | tail -n 300; true`, "sh", sid], { on: space?.machine ?? null });
+        text = g.stdout + "\n" + text; // transcript first, the screen (newest) last
+      }
+      for (const m of text.matchAll(PR_URL_RE)) {
+        const url = m[0].replace(/[).,;:'"\]]+$/, "");
+        const names = found.get(url) ?? [];
+        if (!names.includes(name)) names.push(name);
+        found.delete(url); // re-insert: Map order = last seen, newest at the end
+        found.set(url, names);
+      }
+    }
+    // Details from gh for GitHub links (cached GH_TTL); other hosts show as plain links.
+    await Promise.all([...found.keys()].filter((u) => u.includes("github.com/")).map(async (url) => {
+      const c = this.urlCache[url];
+      if (c && Date.now() - c.at < GH_TTL) return;
+      const r = await sh("gh", ["pr", "view", url, "--json", "number,title,url,state,isDraft,reviewDecision,statusCheckRollup"]);
+      let pr = null;
+      try { if (r.code === 0) pr = JSON.parse(r.stdout); } catch {}
+      this.urlCache[url] = { at: Date.now(), pr };
+    }));
+    const own = new Set(this.tabPrs.map((g) => g.pr?.url).filter(Boolean));
+    this.mentions = [...found.entries()].filter(([url]) => !own.has(url)).slice(-12).reverse()
+      .map(([url, sessions]) => ({ url, sessions, pr: this.urlCache[url]?.pr ?? null }));
+  }
 
   // One `gh pr list --head <branch>` per session branch, cached GH_TTL; sessions on the same PR merge.
   loadTab(cx) {
@@ -145,6 +198,8 @@ export default class Auspex extends View {
         }
         // PRs first, then branches without one.
         this.tabPrs = [...groups.values()].sort((a, b) => (b.pr ? 1 : 0) - (a.pr ? 1 : 0));
+        cx.notify();
+        await this.scanMentions();
       } finally {
         this.tabBusy = false;
         cx.notify();
@@ -306,6 +361,26 @@ export default class Auspex extends View {
           .when(pr.reviewDecision === "CHANGES_REQUESTED", (el) => el.child(plate("Δ", t.blocked)))
           .child(plate(s ? word(s) : "—", tone(s))))
         .child(div().text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${pr.url.replace(/^https?:\/\//, "")}`)));
+    }
+    // PR links found in the text of this tab's terminals (newest first).
+    if (this.mentions.length) {
+      body.child(div().text_size(10.5).text_color(t.dim).mt(6).mb(2).child("LINKED IN THIS TAB'S TERMINALS"));
+      const stateTone = { OPEN: t.done, MERGED: t.ansi5 ?? t.accent, CLOSED: t.blocked };
+      for (const m of this.mentions) {
+        const pr = m.pr, s = pr ? rollup(pr.statusCheckRollup) : null;
+        const path = m.url.replace(/^https?:\/\/(www\.)?/, "");
+        body.child(v_flex().id(`mention-${m.url}`).py(2).px(2).cursor_pointer().hover((el) => el.bg(t.hover))
+          .on_click(() => this.open(m.url)).tooltip(`Open ${m.url}`)
+          .child(div().text_size(10.5).text_color(t.dim).truncate().child(`in ${m.sessions.join(", ")}`))
+          .when(Boolean(pr), (el) => el.child(h_flex().gap(6).items_center().text_size(12)
+            .child(div().flex_none().text_color(t.accent).child(`#${pr.number}`))
+            .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(`${pr.isDraft ? "[draft] " : ""}${pr.title}`))
+            .when(pr.reviewDecision === "APPROVED", (el) => el.child(plate("✓", t.done)))
+            .when(pr.reviewDecision === "CHANGES_REQUESTED", (el) => el.child(plate("Δ", t.blocked)))
+            .child(plate(pr.state, stateTone[pr.state] ?? t.dim))
+            .when(pr.state === "OPEN", (el) => el.child(plate(s ? word(s) : "—", tone(s))))))
+          .child(div().text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${path}`)));
+      }
     }
     if (r?.root) {
       body.child(div().text_size(10.5).text_color(t.dim).mt(6).mb(2).child(`FOCUSED REPO · ${r.root.split("/").pop()}`));
