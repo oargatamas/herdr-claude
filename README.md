@@ -34,8 +34,12 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
 - Report every `!` warning the script prints. Typical ones:
   - **Key already bound to something else**: ask the person; rerun with `--force-keys` only if
     they want the kit's binding.
-  - **No personal profile**: the person creates it with `CLAUDE_CONFIG_DIR=~/.claude-personal claude`
-    (and logs in), then the installer runs again.
+  - **No personal profile**: the person creates it with `claude-personal` (or
+    `CLAUDE_CONFIG_DIR=~/.claude-personal claude`) and logs in, then the installer runs again.
+- **Personal subscription (optional)**: run in a terminal, the installer asks whether to set up a
+  second, personal Claude subscription and, if yes, adds the `claude-personal` alias to `~/.zshrc`
+  (or `~/.bashrc` / `~/.bash_profile`) in a marked block, after a backup. Claude can't answer that
+  question, so ask the person and pass `--personal` or `--no-personal`.
   - **Herdr version differs**: see "Herdr updates" below.
 - It's safe to run again; that is also how to update (`git pull && ./install.sh`).
 
@@ -61,7 +65,8 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
   (answering another session's dialogs) is denied.
 
 Profiles: company = `~/.claude` (`claude`), personal = `~/.claude-personal`
-(`CLAUDE_CONFIG_DIR=~/.claude-personal claude`, e.g. via an alias `claude-personal`).
+(`claude-personal`, the alias the installer adds on request: `--personal`, or answer yes when asked;
+`claude-ws --profile personal` works without it).
 
 ## How a worker's model is chosen
 
