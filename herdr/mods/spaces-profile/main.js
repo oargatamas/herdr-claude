@@ -519,6 +519,15 @@ export default class Spaces extends View {
       .child(div().absolute().right(5).text_color(tone(t, w.status)).child(glyph(w.status))));
   }
 
+  // Auspex scanner over the whole widget: a faint green line sweeping down and up, drawn on top.
+  withSweep(t, period, inner) {
+    return div().id("sweep-root").relative().size_full().min_h(0)
+      .on_size_change((size, cx) => { if (Math.abs((this.sweepH ?? 0) - size.height) > 1) { this.sweepH = size.height; cx.notify(); } })
+      .child(inner)
+      .when(motion() && (this.sweepH ?? 0) > 20, (el) => el.child(div().absolute().left(0).right(0).top(0).h(2).bg(t.done).opacity(0.18)
+        .loop("top", { from: 0, to: this.sweepH - 2, period, easing: "linear" })));
+  }
+
   render() {
     const t = theme();
     const collapsed = narrow();
@@ -542,7 +551,7 @@ export default class Spaces extends View {
       this.revealedAt = this.activeAt;
       if (this.activeAt >= 0) this.scroll.scroll_to_item(this.activeAt);
     }
-    return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
+    return this.withSweep(t, 7000, v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
       .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11.5).text_color(t.dim)
         .when(collapsed, el => el.pl(0).pr(0).justify_center())
         .when(!collapsed, el => el.child(h_flex().gap(5).items_center().text_color(t.accent)
@@ -555,6 +564,6 @@ export default class Spaces extends View {
         // A block above (another mod's) growing, or the window resizing, shrinks this list and can push the active space out.
         .on_size_change((_size, cx) => { if (this.activeAt >= 0) { this.scroll.scroll_to_item(this.activeAt); cx.notify(); } })
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
-        .children(list));
+        .children(list)));
   }
 }

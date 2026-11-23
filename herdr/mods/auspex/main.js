@@ -145,7 +145,7 @@ export default class Auspex extends View {
       return;
     }
     this.subs = {};            // root → { at, list: [{ path, parent, name, url, mark, recorded, ...status, branch, commit }] }
-    try { this.subOpen = new Set(JSON.parse(localStorage.getItem("sub-open") ?? "[]")); } catch { this.subOpen = new Set(); }
+    this.subOpen = new Set();  // opened submodule nodes (repo|path); all start collapsed
     this.repo = null;          // { root, machine, branch, upstream, ahead, behind, staged, unstaged, untracked, conflicts, commit }
     this.cwdKey = null;
     this.busy = false;
@@ -369,10 +369,9 @@ export default class Auspex extends View {
     this.subs[root] = { at: Date.now(), list };
   }
 
-  // Opens or closes one submodule node; remembered per repo|path.
+  // Opens or closes one submodule node (until AUSPEX restarts; they start collapsed).
   toggleSub(key) {
     if (this.subOpen.has(key)) this.subOpen.delete(key); else this.subOpen.add(key);
-    try { localStorage.setItem("sub-open", JSON.stringify([...this.subOpen])); } catch {}
   }
 
   // Full commit message in a dialog (this mod, opened again with props.commit).
@@ -452,7 +451,7 @@ export default class Auspex extends View {
         const mark = { "+": ["MOVED", t.working, "checked-out commit differs from the one recorded here"], "-": ["UNINIT", t.dim, "not initialized"], "U": ["CONFLICT", t.blocked, "merge conflict"] };
         const kids = (path) => subs.filter((y) => y.parent === path);
         const node = (x, lead, last, depth) => {
-          const key = `${r.root}|${x.path}`, open = this.subOpen.has(key) !== Boolean(props()?.expandAll);
+          const key = `${r.root}|${x.path}`, open = this.subOpen.has(key);
           const dirty = (x.staged ?? 0) + (x.unstaged ?? 0) + (x.untracked ?? 0) + (x.conflicts ?? 0);
           const [word0, color0, why] = mark[x.mark] ?? (dirty ? ["DIRTY", t.working, "uncommitted changes"] : ["SYNCED", t.done, "at the recorded commit, clean"]);
           const children = kids(x.path);
