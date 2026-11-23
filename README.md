@@ -123,6 +123,8 @@ branch, merged and cleaned up by `hc-worker stop` and `hc-worker prune`.
 | `herdr/shared/profile.js` | The badge code, copied into both |
 | `herdr/mods/help-plus/` | Copy of Herdr's keybinds dialog with the Claude section |
 | `herdr/layouts/main-profile.json` | Copy of Herdr's `main` layout using the two copies above, with the Mechanicus look (theme, fonts, square frames) |
+| `herdr/mods/auspex/` | AUSPEX panel (tab bar button, right panel): focused repo's branch, dirty state, ahead/behind, last commit; open PRs with CI and review state and the branch's latest CI run (gh, cached 3 min); last test result left by pytest/vitest or an `hc` test run; agents overview; TODO/FIXME scan; per-repo notes. Read-only, polls only while shown |
+| `herdr/mods/status-mechanicus/`, `pane-mechanicus/` | Copies of Herdr's `workspace-status` and `pane` mods, restyled only |
 | `herdr/themes/mechanicus.json` | Adeptus Mechanicus cogitator theme: phosphor green on black, brass accents, forge-red buttons |
 | `herdr/mods/spaces-profile/fonts/` | Share Tech Mono (OFL), the UI font of the Mechanicus look |
 | `herdr/keys.fragment.json` | Our key bindings (`__HOME__` = home folder), merged into `keys.json` |
@@ -144,5 +146,6 @@ improvements. When Herdr changes them, re-copy and re-apply the small changes:
    - `spaces-profile` / `tabs-profile`: `import { profilesIn, badge } from "./profile.js"` and
      one `.children(profilesIn(...).map(...badge...))` line next to the name.
    - `help-plus`: the `CLAUDE` / `claudeLabel` / `command()` helpers and the `claude` group.
-   - layout: `"mod": "spaces-profile"` and `"mod": "tabs-profile"`.
+   - layout: `"mod": "spaces-profile"`, `"mod": "tabs-profile"`, `status-mechanicus`, `pane-mechanicus`, the `auspex` panel child and the Mechanicus look on the root.
+   - `status-mechanicus` / `pane-mechanicus`: visual changes only (colors, glyphs, square corners).
 2. Replace the folders here, `./install.sh`, check, commit.
