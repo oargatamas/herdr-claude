@@ -1,8 +1,7 @@
 // AUSPEX sections:
 //   REPO-SPIRIT: git branch, upstream ahead/behind, dirty counts, last commit
-//   PULL-PETITIONS & CI: the PR of every session in the shown tab (with links), PR links
-//     found in those terminals' text, open PRs,
-//     checks, review state, branch's latest CI run (via gh)
+//   PULL-PETITIONS & CI: the PR of every session in the shown tab and PR links found in
+//     those terminals' text, with checks and review state (via gh)
 //   RITE OF TESTING: last pytest/vitest or hc test result (never runs tests)
 //   HERESIES TO PURGE: TODO/FIXME scan
 //   Jira keys (ABC-123) in branches and PR titles get a link to the Jira site seen in sessions
@@ -10,13 +9,13 @@
 // AUSPEX: read-only engineering readings for the focused terminal's repository, in the
 // Mechanicus look. It never changes anything: git and gh are only asked questions
 // (git with --no-optional-locks), tests are never run, only their last results read.
-// Polls only while its panel is shown; gh answers are cached per repository.
+// Polls only while shown; gh answers are cached per branch and link.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
 import { exec, hc, spaces, panes, terminals, focused, layout, theme, window, home, checking } from "herdr";
 
 const GIT_EVERY = 15_000;     // branch, dirty, ahead/behind, last commit
-const GH_TTL = 180_000;       // pull requests and CI runs, per repository
+const GH_TTL = 180_000;       // gh answers, per branch and per link
 const SLOW_TTL = 60_000;      // TODO scan and test results
 const MENTION_EVERY = 60_000; // re-read the shown tab's terminals for PR links
 const MENTION_LINES = 400;    // history lines read above each screen
@@ -52,12 +51,6 @@ function rollup(checks) {
   return pending ? "pending" : "pass";
 }
 
-function runState(r) {
-  if (!r) return null;
-  if (r.status !== "completed") return "pending";
-  return r.conclusion === "success" ? "pass" : ["skipped", "neutral"].includes(r.conclusion) ? "idle" : "fail";
-}
-
 // Jira issue keys (ABC-123) in a branch or title; common non-issue look-alikes are skipped.
 const JIRA_RE = /\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/g;
 const NOT_JIRA = new Set(["UTF", "ISO", "SHA", "RFC", "HTTP", "TLS", "SSL", "CVE", "GPT", "MD5", "X11", "AES", "RSA"]);
@@ -81,7 +74,6 @@ export default class Auspex extends View {
   init(_props, cx) {
     this.repo = null;          // { root, machine, branch, upstream, ahead, behind, staged, unstaged, untracked, conflicts, commit }
     this.cwdKey = null;
-    this.gh = {};              // root → { at, prs, run, error }
     this.slow = {};            // root → { at, todos, todoCount, tests }
     this.busy = false;
     this.tabPrs = [];          // [{ key, sessions: [names], branch, cwd, pr, error }] for the shown tab
@@ -269,28 +261,12 @@ export default class Auspex extends View {
           this.notes.set_value(saved);
         }
         cx.notify();
-        await Promise.all([this.loadGh(repo), this.loadSlow(repo)]);
+        await this.loadSlow(repo);
       } finally {
         this.busy = false;
         cx.notify();
       }
     });
-  }
-
-  async loadGh(repo) {
-    const c = this.gh[repo.root];
-    if (c && Date.now() - c.at < GH_TTL) return;
-    const on = repo.machine, cwd = repo.root;
-    const [prs, runs] = await Promise.all([
-      sh("gh", ["pr", "list", "--limit", "6", "--json", "number,title,url,isDraft,headRefName,reviewDecision,statusCheckRollup,author"], { cwd, on }),
-      repo.branch && repo.branch !== "(detached)"
-        ? sh("gh", ["run", "list", "--branch", repo.branch, "--limit", "1", "--json", "status,conclusion,workflowName,createdAt,displayTitle"], { cwd, on })
-        : Promise.resolve({ code: 0, stdout: "[]" }),
-    ]);
-    const entry = { at: Date.now(), prs: [], run: null, error: null };
-    try { if (prs.code === 0) entry.prs = JSON.parse(prs.stdout || "[]"); else entry.error = (prs.stderr || "gh failed").trim().split("\n")[0]; } catch { entry.error = "unreadable gh answer"; }
-    try { if (runs.code === 0) entry.run = JSON.parse(runs.stdout || "[]")[0] ?? null; } catch {}
-    this.gh[repo.root] = entry;
   }
 
   async loadSlow(repo) {
@@ -350,7 +326,7 @@ export default class Auspex extends View {
         .child(`◆ ${k}`));
     };
 
-    const r = this.repo, gh = r?.root ? this.gh[r.root] : null, slow = r?.root ? this.slow[r.root] : null;
+    const r = this.repo, slow = r?.root ? this.slow[r.root] : null;
     const body = v_flex().px(16).pb(14);
 
     // ── Repository
@@ -368,7 +344,7 @@ export default class Auspex extends View {
     }
 
     // ── PRs and CI
-    body.child(heading("✠", "PULL-PETITIONS & CI", gh ? ago(gh.at) : ""));
+    body.child(heading("✠", "PULL-PETITIONS & CI", this.tabAt ? ago(this.tabAt) : ""));
     // The PR of every session in the shown tab, with its link.
     body.child(div().text_size(10.5).text_color(t.dim).mb(2).child("THIS TAB'S SESSIONS"));
     if (!this.tabPrs.length) body.child(row("sessions", this.tabBusy ? "consulting…" : "no session on a git branch", t.dim));
@@ -415,32 +391,6 @@ export default class Auspex extends View {
           .child(h_flex().gap(4).items_center()
             .child(div().flex_1().min_w(0).text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${path}`))
             .children(jira(`mp-${m.url}`, pr?.title))));
-      }
-    }
-    if (r?.root) {
-      body.child(div().text_size(10.5).text_color(t.dim).mt(6).mb(2).child(`FOCUSED REPO · ${r.root.split("/").pop()}`));
-      if (!gh) body.child(row("gh", "awaiting the noosphere…", t.dim));
-      else {
-        if (gh.run) {
-          const s = runState(gh.run);
-          body.child(h_flex().gap(6).items_center().text_size(12)
-            .child(div().w(78).flex_none().text_color(t.dim).child("branch CI"))
-            .child(plate(word(s), tone(s)))
-            .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(`${gh.run.workflowName} · ${ago(Date.parse(gh.run.createdAt))}`)));
-        }
-        if (gh.error) body.child(row("gh", gh.error, t.dim));
-        else if (!gh.prs.length) body.child(row("open PRs", "none", t.dim));
-        else for (const pr of gh.prs) {
-          const s = rollup(pr.statusCheckRollup), mine = pr.headRefName === r.branch;
-          body.child(h_flex().id(`repo-pr-${pr.number}`).gap(6).items_center().text_size(12).py(1).cursor_pointer()
-            .hover((el) => el.bg(t.hover)).on_click(() => this.open(pr.url)).tooltip(`Open ${pr.url}`)
-            .child(div().w(44).flex_none().text_color(mine ? t.accent : t.dim).child(`#${pr.number}`))
-            .child(div().flex_1().min_w(0).truncate().text_color(mine ? t.foreground : t.muted).child(`${pr.isDraft ? "[draft] " : ""}${pr.title}`))
-            .when(pr.reviewDecision === "APPROVED", (el) => el.child(plate("✓", t.done)))
-            .when(pr.reviewDecision === "CHANGES_REQUESTED", (el) => el.child(plate("Δ", t.blocked)))
-            .children(jira(`rp-${pr.number}`, pr.title, pr.headRefName))
-            .child(plate(s ? word(s) : "—", tone(s))));
-        }
       }
     }
 
