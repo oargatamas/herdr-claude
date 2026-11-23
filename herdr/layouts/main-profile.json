@@ -120,7 +120,7 @@
                     "position": "top"
                   },
                   "background": {
-                    "image": "backgrounds/mechanicus-terminal.png",
+                    "image": "backgrounds/mechanicus-emblem-backdrop.png",
                     "fit": "cover"
                   },
                   "border": {
