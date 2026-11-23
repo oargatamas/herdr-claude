@@ -37,10 +37,21 @@
               "min": 90
             },
             {
+              "id": "auspex",
+              "type": "block",
+              "content": {
+                "mod": "auspex"
+              },
+              "size": {
+                "weight": 1.6
+              },
+              "min": 140
+            },
+            {
               "id": "agents",
               "type": "block",
               "content": {
-                "mod": "agents"
+                "mod": "servitors-mechanicus"
               },
               "size": {
                 "weight": 1
@@ -64,7 +75,7 @@
         }
       ],
       "size": {
-        "px": 268
+        "px": 300
       },
       "min": 44,
       "max": 480,
@@ -143,13 +154,6 @@
                       "type": "block",
                       "content": {
                         "mod": "changes"
-                      }
-                    },
-                    {
-                      "id": "auspex",
-                      "type": "block",
-                      "content": {
-                        "mod": "auspex"
                       }
                     }
                   ],
