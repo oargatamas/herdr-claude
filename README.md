@@ -107,7 +107,11 @@ branch, merged and cleaned up by `hc-worker stop` and `hc-worker prune`.
 
 ## Mechanicus look
 
-The main-profile layout uses the mechanicus theme (`herdr/themes/mechanicus.json`): phosphor green on black, brass accents, forge-red buttons. The UI font is Share Tech Mono (OFL, bundled in `herdr/mods/spaces-profile/fonts/`). The sidebar brand carries an original cog-and-skull emblem (`herdr/mods/chrome-mechanicus/cog-skull.svg`). AUSPEX and SERVITORS live in the left sidebar.
+The main-profile layout uses the mechanicus theme (`herdr/themes/mechanicus.json`): phosphor
+green on black, brass accents, forge-red buttons. The UI font is Share Tech Mono (OFL, bundled
+in `herdr/mods/spaces-profile/fonts/`). The sidebar brand carries an original cog-and-skull
+emblem (`herdr/mods/chrome-mechanicus/cog-skull.svg`). AUSPEX and SERVITORS live in the left
+sidebar.
 
 ## Layout of this repository
 
