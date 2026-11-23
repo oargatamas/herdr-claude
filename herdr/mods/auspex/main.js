@@ -555,8 +555,8 @@ export default class Auspex extends View {
       .child(div().id("auspex-body").relative().flex_1().min_h(0)
         .on_size_change((size, cx) => { if (Math.abs((this.height ?? 0) - size.height) > 1) { this.height = size.height; cx.notify(); } })
         .child(div().id("auspex-scroll").size_full().overflow_y_scrollbar().child(body))
-        // Auspex scanner: a faint green line sweeping down and up the readings.
-        .when(on && h > 20, (el) => el.child(div().absolute().left(0).right(0).top(0).h(2).bg(t.done).opacity(0.18)
+        // Auspex scanner: a faint amber line sweeping down and up the readings.
+        .when(on && h > 20, (el) => el.child(div().absolute().left(0).right(0).top(0).h(2).bg(t.accent).opacity(0.22)
           .loop("top", { from: 0, to: h - 2, period: 9000, easing: "linear" }))));
   }
 }
