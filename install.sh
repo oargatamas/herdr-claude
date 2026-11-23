@@ -142,6 +142,7 @@ if [ "$HERDR" = 1 ]; then
     for d in spaces-profile tabs-profile; do cp "$REPO/herdr/shared/profile.js" "$H/mods/$d/"; done
     ok "mods: $(ls "$REPO/herdr/mods" | tr '\n' ' ')"
     cp "$REPO/herdr/layouts/main-profile.json" "$H/layouts/main-profile.json"; ok "layout main-profile"
+    mkdir -p "$H/themes"; cp "$REPO"/herdr/themes/*.json "$H/themes/"; ok "themes: $(ls "$REPO/herdr/themes" | tr '\n' ' ')"
 
     say "Herdr keys"
     frag=$(sed "s|__HOME__|$HOME|g" "$REPO/herdr/keys.fragment.json")

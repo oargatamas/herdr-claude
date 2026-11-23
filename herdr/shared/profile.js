@@ -24,7 +24,8 @@ export function profilesIn(kind, id) {
 
 export function badge(t, profile, size = 10) {
   const c = t[profile.color];
-  return div().flex_none().px(5).h(size + 6).flex().items_center().rounded(4)
+  // Mechanicus look: square data-plate with bracketed sigil.
+  return div().flex_none().px(4).h(size + 6).flex().items_center().rounded(0)
     .border(1).border_color(c).text_color(c).text_size(size).font_semibold()
-    .child(profile.label.toUpperCase());
+    .child(`⟦${profile.label.toUpperCase()}⟧`);
 }

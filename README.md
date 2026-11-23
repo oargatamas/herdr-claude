@@ -122,7 +122,9 @@ branch, merged and cleaned up by `hc-worker stop` and `hc-worker prune`.
 | `herdr/mods/spaces-profile/`, `tabs-profile/` | Copies of Herdr's sidebar list and tab bar, with badges |
 | `herdr/shared/profile.js` | The badge code, copied into both |
 | `herdr/mods/help-plus/` | Copy of Herdr's keybinds dialog with the Claude section |
-| `herdr/layouts/main-profile.json` | Copy of Herdr's `main` layout using the two copies above |
+| `herdr/layouts/main-profile.json` | Copy of Herdr's `main` layout using the two copies above, with the Mechanicus look (theme, fonts, square frames) |
+| `herdr/themes/mechanicus.json` | Adeptus Mechanicus cogitator theme: phosphor green on black, brass accents, forge-red buttons |
+| `herdr/mods/spaces-profile/fonts/` | Share Tech Mono (OFL), the UI font of the Mechanicus look |
 | `herdr/keys.fragment.json` | Our key bindings (`__HOME__` = home folder), merged into `keys.json` |
 | `herdr/programs.fragment.json` | Shows `env …` launched programs by what they run |
 
