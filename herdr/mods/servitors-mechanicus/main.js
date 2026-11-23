@@ -219,12 +219,12 @@ export default class Agents extends View {
     return div().size(7).mx(3).flex_none().rounded(0).bg(a.status === "done" ? color : t.dim + "00");
   }
 
-  // Auspex scanner over the whole widget: a faint green line sweeping down and up, drawn on top.
+  // Auspex scanner over the whole widget: a faint amber line sweeping down and up, drawn on top.
   withSweep(t, period, inner) {
     return div().id("sweep-root").relative().size_full().min_h(0)
       .on_size_change((size, cx) => { if (Math.abs((this.sweepH ?? 0) - size.height) > 1) { this.sweepH = size.height; cx.notify(); } })
       .child(inner)
-      .when(motion() && (this.sweepH ?? 0) > 20, (el) => el.child(div().absolute().left(0).right(0).top(0).h(2).bg(t.done).opacity(0.18)
+      .when(motion() && (this.sweepH ?? 0) > 20, (el) => el.child(div().absolute().left(0).right(0).top(0).h(2).bg(t.accent).opacity(0.22)
         .loop("top", { from: 0, to: this.sweepH - 2, period, easing: "linear" })));
   }
 

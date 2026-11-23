@@ -120,7 +120,7 @@
                     "position": "top"
                   },
                   "background": {
-                    "image": "backgrounds/mechanicus-emblem-backdrop-6.png",
+                    "image": "backgrounds/mechanicus-emblem-backdrop-grey.png",
                     "fit": "cover"
                   },
                   "border": {
@@ -188,13 +188,7 @@
       "resizable": false
     }
   ],
-  "background": {
-    "gradient": [
-      "#0b1a09",
-      "#020302"
-    ],
-    "angle": 180
-  },
+  "background": "canvas",
   "terminal_padding": [
     14,
     12
@@ -208,9 +202,14 @@
     12,
     16
   ],
-  "theme": "mechanicus",
+  "theme": "graphite",
   "ui_font": "Share Tech Mono",
   "font": "JetBrains Mono",
   "font_weight": 500,
-  "terminal_opacity": 0.2
+  "terminal_opacity": 0.2,
+  "colors": {
+    "accent": "#e8a33d",
+    "accent_foreground": "#101114",
+    "working": "#e8a33d"
+  }
 }

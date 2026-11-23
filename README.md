@@ -107,8 +107,8 @@ branch, merged and cleaned up by `hc-worker stop` and `hc-worker prune`.
 
 ## Mechanicus look
 
-The main-profile layout uses the mechanicus theme (`herdr/themes/mechanicus.json`): phosphor
-green on black, brass accents, forge-red buttons. The UI font is Share Tech Mono (OFL, bundled
+The main-profile layout uses Herdr's default graphite theme with an amber accent (the green
+`herdr/themes/mechanicus.json` theme is still installed and can be picked in Settings). The UI font is Share Tech Mono (OFL, bundled
 in `herdr/mods/spaces-profile/fonts/`). The sidebar brand carries an original cog-and-skull
 emblem (`herdr/mods/chrome-mechanicus/cog-skull.svg`). AUSPEX and SERVITORS live in the left
 sidebar.
@@ -135,7 +135,7 @@ sidebar.
 | `herdr/mods/servitors-mechanicus/` | Copy of Herdr's `agents` mod (all its features: grouping, sort, pin, peek, history, sub-agents), restyled as SERVITORS |
 | `herdr/mods/status-mechanicus/`, `pane-mechanicus/`, `chrome-mechanicus/` | Copies of Herdr's `workspace-status`, `pane` and `workspace-chrome` (sidebar brand and footer) mods, restyled only; `chrome-mechanicus/cog-skull.svg` is the cog-and-skull emblem in the brand block |
 | `herdr/backgrounds/mechanicus-logo.png` | The Adeptus Mechanicus emblem in green on transparent (from the image the owner supplied; Games Workshop artwork, keep this repository private) |
-| `herdr/backgrounds/mechanicus-emblem-backdrop-6.png` | That emblem, small and centred, lightly blurred at 10%, behind every terminal (a new file name for every change: Herdr caches backgrounds by name) (pane frame background; layout `terminal_opacity` 0.2) |
+| `herdr/backgrounds/mechanicus-emblem-backdrop-grey.png` | That emblem in grey, small and centred, lightly blurred at 10% on graphite's background, behind every terminal (a new file name for every change: Herdr caches backgrounds by name) (pane frame background; layout `terminal_opacity` 0.2) |
 | `herdr/themes/mechanicus.json` | Adeptus Mechanicus cogitator theme: phosphor green on black, brass accents, forge-red buttons |
 | `herdr/mods/spaces-profile/fonts/` | Share Tech Mono (OFL), the UI font of the Mechanicus look |
 | `herdr/keys.fragment.json` | Our key bindings (`__HOME__` = home folder), merged into `keys.json` |
