@@ -135,7 +135,7 @@ sidebar.
 | `herdr/mods/servitors-mechanicus/` | Copy of Herdr's `agents` mod (all its features: grouping, sort, pin, peek, history, sub-agents), restyled as SERVITORS |
 | `herdr/mods/status-mechanicus/`, `pane-mechanicus/`, `chrome-mechanicus/` | Copies of Herdr's `workspace-status`, `pane` and `workspace-chrome` (sidebar brand and footer) mods, restyled only; `chrome-mechanicus/cog-skull.svg` is the cog-and-skull emblem in the brand block |
 | `herdr/backgrounds/mechanicus-logo.png` | The Adeptus Mechanicus emblem in green on transparent (from the image the owner supplied; Games Workshop artwork, keep this repository private) |
-| `herdr/backgrounds/mechanicus-emblem-backdrop-4.png` | That emblem, small and centred, lightly blurred at 30%, behind every terminal (a new file name for every change: Herdr caches backgrounds by name) (pane frame background; layout `terminal_opacity` 0.2) |
+| `herdr/backgrounds/mechanicus-emblem-backdrop-5.png` | That emblem, small and centred, lightly blurred at 20%, behind every terminal (a new file name for every change: Herdr caches backgrounds by name) (pane frame background; layout `terminal_opacity` 0.2) |
 | `herdr/themes/mechanicus.json` | Adeptus Mechanicus cogitator theme: phosphor green on black, brass accents, forge-red buttons |
 | `herdr/mods/spaces-profile/fonts/` | Share Tech Mono (OFL), the UI font of the Mechanicus look |
 | `herdr/keys.fragment.json` | Our key bindings (`__HOME__` = home folder), merged into `keys.json` |
