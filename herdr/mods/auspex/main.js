@@ -1,6 +1,7 @@
 // AUSPEX sections:
 //   REPO-SPIRIT: git branch, upstream ahead/behind, dirty counts, last commit
-//   PULL-PETITIONS & CI: open PRs, checks, review state, branch's latest CI run (via gh)
+//   PULL-PETITIONS & CI: the PR of every session in the shown tab (with links), open PRs,
+//     checks, review state, branch's latest CI run (via gh)
 //   RITE OF TESTING: last pytest/vitest or hc test result (never runs tests)
 //   HERESIES TO PURGE: TODO/FIXME scan
 //   DATA-LITANY: per-repo notes
@@ -10,7 +11,7 @@
 // Polls only while its panel is shown; gh answers are cached per repository.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
-import { exec, spaces, terminals, focused, layout, theme, checking } from "herdr";
+import { exec, spaces, panes, terminals, focused, layout, theme, window, home, checking } from "herdr";
 
 const GIT_EVERY = 15_000;     // branch, dirty, ahead/behind, last commit
 const GH_TTL = 180_000;       // pull requests and CI runs, per repository
@@ -51,6 +52,9 @@ function runState(r) {
   return r.conclusion === "success" ? "pass" : ["skipped", "neutral"].includes(r.conclusion) ? "idle" : "fail";
 }
 
+// "~/…" for a folder under home.
+const short = (cwd) => { const h = home(); return !cwd ? "" : cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd; };
+
 async function sh(cmd, args, opts) {
   try { return await exec(cmd, args, { timeout: 15_000, ...opts }); }
   catch (e) { return { code: -1, stdout: "", stderr: String(e?.message ?? e) }; }
@@ -63,6 +67,10 @@ export default class Auspex extends View {
     this.gh = {};              // root → { at, prs, run, error }
     this.slow = {};            // root → { at, todos, todoCount, tests }
     this.busy = false;
+    this.tabPrs = [];          // [{ key, sessions: [names], branch, cwd, pr, error }] for the shown tab
+    this.prCache = {};         // machine|cwd|branch → { at, pr, error }
+    this.tabKeyNow = null;
+    this.tabBusy = false;
     this.notesRoot = null;
     this.notes = TextareaState.new({ placeholder: "Inscribe litanies, TODOs, reminders… (kept on this machine, per repository)" });
     this.notes.set_soft_wrap(true);
@@ -76,8 +84,11 @@ export default class Auspex extends View {
       if (!this.visible()) return;
       const key = this.focusKey();
       if (key !== this.cwdKey || Date.now() - (this.gitAt ?? 0) > GIT_EVERY) this.refresh(cx);
+      const tk = this.tabKey();
+      if (tk !== this.tabKeyNow || Date.now() - (this.tabAt ?? 0) > GH_TTL) this.loadTab(cx);
     });
     this.refresh(cx);
+    this.loadTab(cx);
   }
 
   // In the sidebar: shown unless the auspex block or the sidebar is hidden, or the sidebar is a rail.
@@ -91,6 +102,60 @@ export default class Auspex extends View {
     const f = focused(), space = spaces().find((s) => s.id === f?.space) ?? spaces().find((s) => s.active);
     const cwd = f?.cwd ?? space?.folder ?? null;
     return cwd ? `${space?.machine ?? ""}\u0000${cwd}` : null;
+  }
+
+  // The shown tab's terminal sessions with a git branch, as "machine|cwd|branch" keys.
+  tabSessions() {
+    const f = focused();
+    const space = spaces().find((s) => s.id === f?.space) ?? spaces().find((s) => s.active);
+    const tab = f?.tab ?? space?.tabs?.find((x) => x.active)?.id;
+    const machine = space?.machine ?? "";
+    return panes().filter((p) => p.tab === tab && p.terminal && p.cwd && p.branch && p.branch !== "HEAD")
+      .map((p) => ({ key: `${machine}|${p.cwd}|${p.branch}`, machine: machine || null, cwd: p.cwd, branch: p.branch,
+        name: (p.program?.agent || p.program?.shell) && p.program.name ? p.program.name : p.title || p.terminal }));
+  }
+
+  tabKey() { return this.tabSessions().map((x) => x.key).sort().join("\n"); }
+
+  // One `gh pr list --head <branch>` per session branch, cached GH_TTL; sessions on the same PR merge.
+  loadTab(cx) {
+    if (this.tabBusy) return;
+    this.tabBusy = true;
+    const sessions = this.tabSessions();
+    this.tabKeyNow = this.tabKey();
+    cx.spawn(async (cx) => {
+      try {
+        this.tabAt = Date.now();
+        await Promise.all([...new Map(sessions.map((x) => [x.key, x])).values()].map(async (x) => {
+          const c = this.prCache[x.key];
+          if (c && Date.now() - c.at < GH_TTL) return;
+          const r = await sh("gh", ["pr", "list", "--head", x.branch, "--state", "open", "--limit", "1",
+            "--json", "number,title,url,isDraft,reviewDecision,statusCheckRollup"], { cwd: x.cwd, on: x.machine });
+          let pr = null, error = null;
+          try { if (r.code === 0) pr = JSON.parse(r.stdout || "[]")[0] ?? null; else error = (r.stderr || "gh failed").trim().split("\n")[0]; } catch { error = "unreadable gh answer"; }
+          this.prCache[x.key] = { at: Date.now(), pr, error };
+        }));
+        const groups = new Map();
+        for (const x of sessions) {
+          const c = this.prCache[x.key] ?? {};
+          const id = c.pr?.url ?? `${x.machine ?? ""}|${x.cwd}|${x.branch}`;
+          const g = groups.get(id) ?? { id, sessions: [], branch: x.branch, cwd: x.cwd, pr: c.pr ?? null, error: c.error ?? null };
+          if (!g.sessions.includes(x.name)) g.sessions.push(x.name);
+          groups.set(id, g);
+        }
+        // PRs first, then branches without one.
+        this.tabPrs = [...groups.values()].sort((a, b) => (b.pr ? 1 : 0) - (a.pr ? 1 : 0));
+      } finally {
+        this.tabBusy = false;
+        cx.notify();
+      }
+    });
+  }
+
+  // Opens a PR in the browser (only on a click).
+  open(url) {
+    const p = window()?.platform;
+    sh(p === "macos" ? "open" : p === "windows" ? "explorer" : "xdg-open", [url]);
   }
 
   refresh(cx) {
@@ -143,7 +208,7 @@ export default class Auspex extends View {
     if (c && Date.now() - c.at < GH_TTL) return;
     const on = repo.machine, cwd = repo.root;
     const [prs, runs] = await Promise.all([
-      sh("gh", ["pr", "list", "--limit", "6", "--json", "number,title,isDraft,headRefName,reviewDecision,statusCheckRollup,author"], { cwd, on }),
+      sh("gh", ["pr", "list", "--limit", "6", "--json", "number,title,url,isDraft,headRefName,reviewDecision,statusCheckRollup,author"], { cwd, on }),
       repo.branch && repo.branch !== "(detached)"
         ? sh("gh", ["run", "list", "--branch", repo.branch, "--limit", "1", "--json", "status,conclusion,workflowName,createdAt,displayTitle"], { cwd, on })
         : Promise.resolve({ code: 0, stdout: "[]" }),
@@ -219,8 +284,31 @@ export default class Auspex extends View {
     }
 
     // ── PRs and CI
+    body.child(heading("✠", "PULL-PETITIONS & CI", gh ? ago(gh.at) : ""));
+    // The PR of every session in the shown tab, with its link.
+    body.child(div().text_size(10.5).text_color(t.dim).mb(2).child("THIS TAB'S SESSIONS"));
+    if (!this.tabPrs.length) body.child(row("sessions", this.tabBusy ? "consulting…" : "no session on a git branch", t.dim));
+    for (const g of this.tabPrs) {
+      const pr = g.pr, s = pr ? rollup(pr.statusCheckRollup) : null;
+      const who = div().text_size(10.5).text_color(t.dim).truncate().child(`${g.sessions.join(", ")} · ${g.branch} · ${short(g.cwd)}`);
+      if (!pr) {
+        body.child(v_flex().py(2).child(who)
+          .child(div().text_size(11.5).text_color(t.dim).truncate().child(g.error ? `gh: ${g.error}` : "no open pull-petition")));
+        continue;
+      }
+      body.child(v_flex().id(`tab-pr-${pr.url}`).py(2).px(2).cursor_pointer().hover((el) => el.bg(t.hover))
+        .on_click(() => this.open(pr.url)).tooltip(`Open ${pr.url}`)
+        .child(who)
+        .child(h_flex().gap(6).items_center().text_size(12)
+          .child(div().flex_none().text_color(t.accent).child(`#${pr.number}`))
+          .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(`${pr.isDraft ? "[draft] " : ""}${pr.title}`))
+          .when(pr.reviewDecision === "APPROVED", (el) => el.child(plate("✓", t.done)))
+          .when(pr.reviewDecision === "CHANGES_REQUESTED", (el) => el.child(plate("Δ", t.blocked)))
+          .child(plate(s ? word(s) : "—", tone(s))))
+        .child(div().text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${pr.url.replace(/^https?:\/\//, "")}`)));
+    }
     if (r?.root) {
-      body.child(heading("✠", "PULL-PETITIONS & CI", gh ? ago(gh.at) : "…"));
+      body.child(div().text_size(10.5).text_color(t.dim).mt(6).mb(2).child(`FOCUSED REPO · ${r.root.split("/").pop()}`));
       if (!gh) body.child(row("gh", "awaiting the noosphere…", t.dim));
       else {
         if (gh.run) {
@@ -234,7 +322,8 @@ export default class Auspex extends View {
         else if (!gh.prs.length) body.child(row("open PRs", "none", t.dim));
         else for (const pr of gh.prs) {
           const s = rollup(pr.statusCheckRollup), mine = pr.headRefName === r.branch;
-          body.child(h_flex().gap(6).items_center().text_size(12).py(1)
+          body.child(h_flex().id(`repo-pr-${pr.number}`).gap(6).items_center().text_size(12).py(1).cursor_pointer()
+            .hover((el) => el.bg(t.hover)).on_click(() => this.open(pr.url)).tooltip(`Open ${pr.url}`)
             .child(div().w(44).flex_none().text_color(mine ? t.accent : t.dim).child(`#${pr.number}`))
             .child(div().flex_1().min_w(0).truncate().text_color(mine ? t.foreground : t.muted).child(`${pr.isDraft ? "[draft] " : ""}${pr.title}`))
             .when(pr.reviewDecision === "APPROVED", (el) => el.child(plate("✓", t.done)))
