@@ -55,7 +55,7 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
 
 - **Profile everywhere**: Claude's status line shows `● COMPANY` / `● PERSONAL` and the account
   email; Herdr's sidebar and tab bar show a coloured badge for every space and tab running Claude
-  (layout `main-profile`).
+  (layouts `mechanicus-grey` and `mechanicus-green`).
 - **`hc-parallel-dev` skill**: "split this into workers" → plan, workers as splits beside the
   orchestrator (or tabs) in git worktrees, each on a model and effort the orchestrator picks from
   the task's complexity (`haiku`/`sonnet`/`opus`, `hc-worker start --model … --effort …`) (`hc-worker start`), coordination with `hc send` / `hc wait`, review, merge, cleanup
@@ -112,8 +112,16 @@ branch, merged and cleaned up by `hc-worker stop` and `hc-worker prune`.
 
 ## Mechanicus look
 
-The main-profile layout uses Herdr's default graphite theme with an amber accent (the green
-`herdr/themes/mechanicus.json` theme is still installed and can be picked in Settings). The UI font is Share Tech Mono (OFL, bundled
+Two looks, each a layout with its own theme and terminal emblem; pick one in Settings → Layouts or
+with `herdr-app do layout.switch --name mechanicus-grey` (or `mechanicus-green`). The installer
+switches to grey unless one of them is already shown.
+
+| Layout | Theme | Terminal emblem |
+|---|---|---|
+| `mechanicus-grey` (default) | `mechanicus-grey`: Herdr's graphite with an amber accent | grey |
+| `mechanicus-green` | `mechanicus-green`: phosphor green on black, brass accents, forge-red buttons | green |
+
+The UI font is Share Tech Mono (OFL, bundled
 in `herdr/mods/spaces-profile/fonts/`). The sidebar brand carries an original cog-and-skull
 emblem (`herdr/mods/chrome-mechanicus/cog-skull.svg`). AUSPEX and SERVITORS live in the left
 sidebar.
@@ -135,14 +143,14 @@ sidebar.
 | `herdr/mods/spaces-profile/`, `tabs-profile/` | Copies of Herdr's sidebar list and tab bar, with badges |
 | `herdr/shared/profile.js` | The badge code, copied into both |
 | `herdr/mods/help-plus/` | Copy of Herdr's keybinds dialog with the Claude section |
-| `herdr/layouts/main-profile.json` | Copy of Herdr's `main` layout using the two copies above, with the Mechanicus look (theme, fonts, square frames) |
+| `herdr/layouts/mechanicus-grey.json`, `mechanicus-green.json` (+ `.svg` previews) | Copies of Herdr's `main` layout using the mods here, with the Mechanicus look (theme, fonts, square frames, terminal emblem); identical except theme, background and emblem |
 | `herdr/mods/auspex/` | AUSPEX, always shown in the left sidebar between Spaces and Servitors: the focused repo's branch, dirty state, ahead/behind and last commit (an icon opens the full message in a dialog); its submodules as an expandable tree of the import hierarchy, named by repo, each with state (synced, moved, dirty, uninitialized, conflict), branch (found by name for detached commits) and last commit; the open PR of every session in the shown tab and PR links found in its terminals (screens and Claude transcripts), with checks and review state via gh (cached 3 min); Jira links for issue keys. Read-only, polls only while shown |
 | `herdr/mods/composer/` | Prompt composer: the COMPOSE button in an agent pane's header opens a big text box; Send (⌘↵) submits it to that session with `hc send`, Insert (⌘I) puts it into the prompt without sending (through the clipboard, restored after), Copy copies it. The draft is kept per terminal until sent |
 | `herdr/mods/servitors-mechanicus/` | Copy of Herdr's `agents` mod (all its features: grouping, sort, pin, peek, history, sub-agents), restyled as SERVITORS |
 | `herdr/mods/status-mechanicus/`, `pane-mechanicus/`, `chrome-mechanicus/` | Copies of Herdr's `workspace-status`, `pane` and `workspace-chrome` (sidebar brand and footer) mods, restyled only; `chrome-mechanicus/cog-skull.svg` is the cog-and-skull emblem in the brand block |
 | `herdr/backgrounds/mechanicus-logo.png` | The Adeptus Mechanicus emblem in green on transparent (from the image the owner supplied; Games Workshop artwork, keep this repository private) |
-| `herdr/backgrounds/mechanicus-emblem-backdrop-grey.png` | That emblem in grey, small and centred, lightly blurred at 10% on graphite's background, behind every terminal (a new file name for every change: Herdr caches backgrounds by name) (pane frame background; layout `terminal_opacity` 0.2) |
-| `herdr/themes/mechanicus.json` | Adeptus Mechanicus cogitator theme: phosphor green on black, brass accents, forge-red buttons |
+| `herdr/backgrounds/mechanicus-emblem-backdrop-grey.png`, `-green.png` | That emblem in grey / green, small and centred, lightly blurred at 10%, behind every terminal of the matching layout (pane frame background; `terminal_opacity` 0.2). Use a new file name for every change: Herdr caches backgrounds by name |
+| `herdr/themes/mechanicus-grey.json`, `mechanicus-green.json` | The two themes (see Mechanicus look) |
 | `herdr/mods/spaces-profile/fonts/` | Share Tech Mono (OFL), the UI font of the Mechanicus look |
 | `herdr/keys.fragment.json` | Our key bindings (`__HOME__` = home folder), merged into `keys.json` |
 | `herdr/programs.fragment.json` | Shows `env …` launched programs by what they run |
@@ -154,7 +162,7 @@ Edits made directly in `~/.config/herdr-app` or `~/.claude` are overwritten by t
 
 ## Herdr updates
 
-`spaces-profile`, `tabs-profile`, `help-plus` and the `main-profile` layout are copies of
+`spaces-profile`, `tabs-profile`, `help-plus` and the two `mechanicus-*` layouts are copies of
 Herdr's shipped versions (see `cloned_from` in the layout). They don't get Herdr's later
 improvements. When Herdr changes them, re-copy and re-apply the small changes:
 

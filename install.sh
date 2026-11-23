@@ -6,7 +6,7 @@
 #   ./install.sh [--force-keys] [--no-herdr] [--no-switch] [--personal | --no-personal]
 #     --force-keys   take over a Herdr key that is already bound to something else
 #     --no-herdr     only the Claude Code part (no Herdr app on this machine)
-#     --no-switch    don't switch the running Herdr window to the main-profile layout
+#     --no-switch    don't switch the running Herdr window to the mechanicus-grey layout
 #     --personal     set up a second, personal Claude subscription: add the claude-personal
 #                    alias to your shell (asked interactively when neither flag is given)
 #     --no-personal  don't ask about the personal subscription
@@ -177,7 +177,7 @@ if [ "$HERDR" = 1 ]; then
     warn "Herdr isn't set up here yet ($H/keys.json missing): start Herdr once, then run this again (or use --no-herdr)"
   else
     say "Herdr mods and layout → $H"
-    built=$(jq -r '.cloned_from.version // empty' "$REPO/herdr/layouts/main-profile.json")
+    built=$(jq -r '.cloned_from.version // empty' "$REPO/herdr/layouts/mechanicus-grey.json")
     have=$(herdr-app --version 2>/dev/null | awk '{print $2}' || true)
     if [ -n "$have" ] && [ -n "$built" ] && [ "$have" != "$built" ]; then
       warn "these copies of Herdr's sidebar, tab bar and help were made from Herdr $built; this is $have. If anything looks off, re-copy them (see README: Herdr updates)"
@@ -188,7 +188,12 @@ if [ "$HERDR" = 1 ]; then
     for d in claude-fork claude-fork-left claude-fork-right claude-fork-up claude-fork-down; do cp "$REPO/herdr/shared/fork.js" "$H/mods/$d/"; done
     for d in spaces-profile tabs-profile; do cp "$REPO/herdr/shared/profile.js" "$H/mods/$d/"; done
     ok "mods: $(ls "$REPO/herdr/mods" | tr '\n' ' ')"
-    cp "$REPO/herdr/layouts/main-profile.json" "$H/layouts/main-profile.json"; ok "layout main-profile"
+    # Two looks, each a layout with its own theme and terminal emblem: mechanicus-grey (default)
+    # and mechanicus-green. Older installs had main-profile and a single mechanicus theme: removed.
+    cp "$REPO"/herdr/layouts/*.json "$REPO"/herdr/layouts/*.svg "$H/layouts/"; ok "layouts: mechanicus-grey, mechanicus-green"
+    for old in "$H/layouts/main-profile.json" "$H/themes/mechanicus.json"; do
+      [ -f "$old" ] && { mv "$old" "$old.bak-herdr-claude-$STAMP"; ok "replaced $(basename "$old") (kept as $(basename "$old").bak-herdr-claude-$STAMP)"; }
+    done
     mkdir -p "$H/themes"; cp "$REPO"/herdr/themes/*.json "$H/themes/"; ok "themes: $(ls "$REPO/herdr/themes" | tr '\n' ' ')"
     mkdir -p "$H/backgrounds"; cp "$REPO"/herdr/backgrounds/* "$H/backgrounds/"; ok "backgrounds: $(ls "$REPO/herdr/backgrounds" | tr '\n' ' ')"
 
@@ -224,11 +229,16 @@ if [ "$HERDR" = 1 ]; then
       done
       sleep 1
       for e in keys layout settings programs; do [ -f "$H/$e.error" ] && warn "Herdr rejected $e: see $H/$e.error"; done
-      if [ "$SWITCH" = 1 ] && herdr-app status >/dev/null 2>&1; then
-        herdr-app do layout.switch --name main-profile >/dev/null && ok "Herdr switched to the main-profile layout (cmd-shift-l switches layouts)"
-      else
-        echo "  → to show the profile badges: herdr-app do layout.switch --name main-profile"
-      fi
+      shown=$(herdr-app status 2>/dev/null | jq -r '.layout // empty' || true)
+      case "$shown" in
+        mechanicus-grey|mechanicus-green) ok "Herdr shows the $shown layout (the other look: herdr-app do layout.switch --name mechanicus-$([ "$shown" = mechanicus-grey ] && echo green || echo grey))" ;;
+        *)
+          if [ "$SWITCH" = 1 ] && [ -n "$shown" ]; then
+            herdr-app do layout.switch --name mechanicus-grey >/dev/null && ok "Herdr switched to the mechanicus-grey layout (mechanicus-green is the green look; cmd-shift-l switches layouts)"
+          else
+            echo "  → to use the look: herdr-app do layout.switch --name mechanicus-grey  (or mechanicus-green)"
+          fi ;;
+      esac
     fi
   fi
 fi
