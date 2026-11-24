@@ -85,6 +85,17 @@ async function sh(cmd, args, opts) {
 const SUB_EVERY = 30_000;     // submodule details, per repository
 const NOTES_EVERY = 5_000;    // re-read the todo file (cheap, no process)
 
+// Loading rites: litanies shown (with animated dots) while AUSPEX waits on git, gh or a file.
+const RITES = {
+  repo: ["Communing with the machine spirit", "Reciting the Litany of Inquiry", "Anointing the data-conduits", "Awakening the cogitator"],
+  noosphere: ["Interrogating the noosphere", "Petitioning the data-vaults", "Decoding binharic cant", "Parsing the vox-traffic"],
+  archive: ["Unsealing the data-scroll", "Consulting the archive", "Invoking the Omnissiah's memory"],
+  slate: ["Retrieving the data-slate", "Inscribing the litany", "Reading the sacred checklist"],
+};
+// Each litany with ".", "..", "..." in turn: one native frames() loop, no timers.
+const riteFrames = (kind) => RITES[kind].flatMap((l) => [`${l}.`, `${l}..`, `${l}...`, `${l}...`]);
+const PULSE = ["▰▱▱▱▱", "▰▰▱▱▱", "▰▰▰▱▱", "▱▰▰▰▱", "▱▱▰▰▰", "▱▱▱▰▰", "▱▱▱▱▰", "▱▱▱▱▱"];
+
 // DATA-INTAKE todos: a markdown checklist anyone can also edit by hand.
 const notesFile = () => `${home()}/.local/share/herdr-claude/todos.md`;
 const NOTES_HEAD = "# Herdr + Claude improvement notes\n\nTodos added from AUSPEX (DATA-INTAKE). Edit freely: lines like `- [ ] text` are the todos.\n\n";
@@ -394,7 +405,7 @@ export default class Auspex extends View {
         .child(`DATA-SCROLL · ${d.label ?? ""} · ${d.hash}`).child(div().flex_1())
         .child(div().id("close-scroll").px(6).cursor_pointer().text_color(t.dim).hover((el) => el.text_color(t.foreground))
           .on_click(() => closeOverlay(props().overlay)).child(svg("mods/chrome-mechanicus/x.svg").size(13))))
-      .child(!f ? div().p(14).text_size(12).text_color(t.dim).child("consulting the archive…")
+      .child(!f ? div().p(14).child(this.rite(t, "archive"))
         : f.error ? div().p(14).text_size(12).text_color(t.blocked).child(f.error)
         : v_flex().flex_1().min_h(0).p(14).gap(3)
           .child(meta("commit", f.full)).child(meta("author", f.author)).child(meta("date", f.date))
@@ -402,6 +413,16 @@ export default class Auspex extends View {
           .child(div().id("scroll-body").flex_1().min_h(0).overflow_y_scrollbar()
             .child(v_flex().gap(2).text_size(12.5).text_color(t.foreground)
               .children(lines.map((l, i) => l.trim() ? div().whitespace_normal().text_color(i === 0 ? t.accent : t.foreground).child(l) : div().h(8))))));
+  }
+
+  // A loading rite: a fast brass cog, a rotating litany with animated dots and a data-pulse bar.
+  // Without motion, a still line. `compact` (for a heading) leaves out the pulse bar.
+  rite(t, kind, compact = false) {
+    if (!motion()) return div().text_size(10.5).text_color(t.dim).child(`${RITES[kind][0]}…`);
+    return h_flex().gap(6).items_center().min_w(0).text_size(10.5)
+      .child(svg("mods/chrome-mechanicus/gear.svg").size(11).flex_none().text_color(t.accent).spin(1400))
+      .child(div().min_w(0).truncate().text_color(t.muted).frames(riteFrames(kind), 420))
+      .when(!compact, (el) => el.child(div().flex_none().text_size(9).text_color(t.accent).frames(PULSE, 140)));
   }
 
   // ── DATA-INTAKE: todo notes in notesFile(), shared by the sidebar and the dialog.
@@ -427,7 +448,9 @@ export default class Auspex extends View {
     this.notesAt = Date.now();
     cx.spawn(async (cx) => {
       const text = await readTextFile(notesFile()).catch(() => null);
-      if (text !== this.notesText) { this.notesText = text; cx.notify(); }
+      const first = !this.notesLoaded;
+      this.notesLoaded = true;
+      if (text !== this.notesText || first) { this.notesText = text; cx.notify(); }
     });
   }
 
@@ -498,7 +521,8 @@ export default class Auspex extends View {
       .child(div().px(14).pt(12).child(this.todoField(t, "todo-field-dialog")))
       .child(div().id("notes-scroll").flex_1().min_h(0).px(14).py(10).overflow_y_scrollbar()
         .child(v_flex().gap(2)
-          .when(!todos.length, (el) => el.child(div().text_size(12).text_color(t.dim).child(this.notesText === null ? "No notes yet." : "No todos in the file yet.")))
+          .when(!this.notesLoaded, (el) => el.child(this.rite(t, "slate")))
+          .when(this.notesLoaded && !todos.length, (el) => el.child(div().text_size(12).text_color(t.dim).child(this.notesText === null ? "No notes yet." : "No todos in the file yet.")))
           .children(open.map((x) => this.todoRow(t, x, true)))
           .when(done.length > 0, (el) => el.child(div().mt(10).mb(2).text_size(10.5).text_color(t.dim).child(`DONE · ${done.length}`)))
           .children(done.map((x) => this.todoRow(t, x, true)))))
@@ -541,8 +565,9 @@ export default class Auspex extends View {
     const body = v_flex().px(16).pt(2).pb(18);
 
     // ── Repository
-    body.child(heading("⚙", "REPO-SPIRIT", this.busy ? "consulting…" : ""));
-    if (!r) body.child(row("focus", "no terminal focused", t.dim));
+    body.child(heading("⚙", "REPO-SPIRIT", this.busy && r ? this.rite(t, "repo", true) : ""));
+    if (!r && this.busy) body.child(div().py(2).child(this.rite(t, "repo")));
+    else if (!r) body.child(row("focus", "no terminal focused", t.dim));
     else if (!r.root) body.child(row("folder", r.cwd, t.muted)).child(row("git", "not a sanctified repository", t.dim));
     else {
       const dirty = r.staged + r.unstaged + r.untracked + r.conflicts;
@@ -595,7 +620,8 @@ export default class Auspex extends View {
     body.child(heading("✠", "PULL-PETITIONS & CI", this.tabAt ? ago(this.tabAt) : ""));
     // The PR of every session in the shown tab, with its link.
     body.child(div().text_size(10.5).text_color(t.dim).mb(4).child("THIS TAB'S SESSIONS"));
-    if (!this.tabPrs.length) body.child(row("sessions", this.tabBusy ? "consulting…" : "no session on a git branch", t.dim));
+    if (!this.tabPrs.length && this.tabBusy) body.child(div().py(2).child(this.rite(t, "noosphere")));
+    else if (!this.tabPrs.length) body.child(row("sessions", "no session on a git branch", t.dim));
     for (const g of this.tabPrs) {
       const pr = g.pr, s = pr ? rollup(pr.statusCheckRollup) : null;
       const who = div().text_size(10.5).text_color(t.dim).truncate().child(`${g.sessions.join(", ")} · ${g.branch} · ${short(g.cwd)}`);
@@ -651,6 +677,7 @@ export default class Auspex extends View {
           .on_click((_e, cx) => { cx.stop_propagation(); this.openNotes(); })
           .child(svg("mods/chrome-mechanicus/panel-right.svg").size(12))));
       body.child(this.todoField(t, "todo-field"));
+      if (!this.notesLoaded) body.child(div().mt(4).child(this.rite(t, "slate")));
       const shown = open.slice(-6).reverse(); // newest first
       body.child(v_flex().mt(4).children(shown.map((x) => this.todoRow(t, x, false))));
       if (open.length > shown.length)
