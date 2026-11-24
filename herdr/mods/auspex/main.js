@@ -83,6 +83,7 @@ async function sh(cmd, args, opts) {
 }
 
 const SUB_EVERY = 30_000;     // submodule details, per repository
+const SWITCH_MIN = 700;      // a workspace switch shows the loading rite at least this long
 const NOTES_EVERY = 5_000;    // re-read the todo file (cheap, no process)
 
 // Loading rites: litanies shown (with animated dots) while AUSPEX waits on git, gh or a file.
@@ -185,8 +186,8 @@ export default class Auspex extends View {
     this.tabBusy = false;
     this.initNotes(cx);
     if (checking()) return;
-    // Cheap check every 2s (no processes): follow focus changes at once.
-    cx.timer.every(2000, (cx) => {
+    // Cheap check every 0.5s (no processes): follow focus and workspace changes at once.
+    cx.timer.every(500, (cx) => {
       if (!this.visible()) return;
       const key = this.focusKey();
       if (key !== this.cwdKey || Date.now() - (this.gitAt ?? 0) > GIT_EVERY) this.refresh(cx);
@@ -283,7 +284,10 @@ export default class Auspex extends View {
     if (this.tabBusy) return;
     this.tabBusy = true;
     const sessions = this.tabSessions();
-    this.tabKeyNow = this.tabKey();
+    const tk = this.tabKey();
+    // Another tab or workspace: hide the old tab's PRs behind the loading rite until the new ones are read.
+    if (this.tabKeyNow !== null && tk !== this.tabKeyNow) { this.tabSwitch = Date.now(); cx.notify(); }
+    this.tabKeyNow = tk;
     cx.spawn(async (cx) => {
       try {
         this.tabAt = Date.now();
@@ -306,13 +310,23 @@ export default class Auspex extends View {
         }
         // PRs first, then branches without one.
         this.tabPrs = [...groups.values()].sort((a, b) => (b.pr ? 1 : 0) - (a.pr ? 1 : 0));
-        cx.notify();
+        if (!this.tabSwitch) cx.notify();
         await this.scanMentions();
       } finally {
         this.tabBusy = false;
+        this.settleSwitch(cx, "tabSwitch");
         cx.notify();
       }
     });
+  }
+
+  // Ends a switch state (repoSwitch / tabSwitch), but not before it has shown for SWITCH_MIN ms.
+  settleSwitch(cx, name) {
+    const since = this[name];
+    if (!since) return;
+    const left = SWITCH_MIN - (Date.now() - since);
+    if (left <= 0) { this[name] = null; return; }
+    cx.timer.after(left, (cx) => { if (this[name] === since) { this[name] = null; cx.notify(); } });
   }
 
   // Opens a PR in the browser (only on a click).
@@ -325,6 +339,8 @@ export default class Auspex extends View {
     if (this.busy) return;
     this.busy = true;
     const key = this.focusKey();
+    // Another workspace or folder: hide the old readings behind the loading rite until the new ones are in.
+    if (this.cwdKey !== null && key !== this.cwdKey) { this.repoSwitch = Date.now(); cx.notify(); }
     cx.spawn(async (cx) => {
       try {
         this.cwdKey = key;
@@ -343,10 +359,11 @@ export default class Auspex extends View {
         repo.branch = repo.head;
         if (repo.head === "(detached)") { const b = await branchOf(root, on); repo.branch = null; repo.detachedOn = b.name; }
         this.repo = repo;
-        cx.notify();
+        if (!this.repoSwitch) cx.notify();
         await this.loadSubs(root, on);
       } finally {
         this.busy = false;
+        this.settleSwitch(cx, "repoSwitch");
         cx.notify();
       }
     });
@@ -565,8 +582,10 @@ export default class Auspex extends View {
     const body = v_flex().px(16).pt(2).pb(18);
 
     // ── Repository
-    body.child(heading("⚙", "REPO-SPIRIT", this.busy && r ? this.rite(t, "repo", true) : ""));
-    if (!r && this.busy) body.child(div().py(2).child(this.rite(t, "repo")));
+    // A switch shows its rite on the first render after it, before the timer has noticed it.
+    const switching = Boolean(this.repoSwitch) || (this.cwdKey !== null && this.focusKey() !== this.cwdKey);
+    body.child(heading("⚙", "REPO-SPIRIT", this.busy && r && !switching ? this.rite(t, "repo", true) : ""));
+    if (switching || (!r && this.busy)) body.child(div().py(2).child(this.rite(t, "repo")));
     else if (!r) body.child(row("focus", "no terminal focused", t.dim));
     else if (!r.root) body.child(row("folder", r.cwd, t.muted)).child(row("git", "not a sanctified repository", t.dim));
     else {
@@ -620,9 +639,11 @@ export default class Auspex extends View {
     body.child(heading("✠", "PULL-PETITIONS & CI", this.tabAt ? ago(this.tabAt) : ""));
     // The PR of every session in the shown tab, with its link.
     body.child(div().text_size(10.5).text_color(t.dim).mb(4).child("THIS TAB'S SESSIONS"));
-    if (!this.tabPrs.length && this.tabBusy) body.child(div().py(2).child(this.rite(t, "noosphere")));
-    else if (!this.tabPrs.length) body.child(row("sessions", "no session on a git branch", t.dim));
-    for (const g of this.tabPrs) {
+    const tabSwitching = Boolean(this.tabSwitch) || (this.tabKeyNow !== null && this.tabKey() !== this.tabKeyNow);
+    const tabPrs = tabSwitching ? [] : this.tabPrs, mentions = tabSwitching ? [] : this.mentions;
+    if (!tabPrs.length && (this.tabBusy || tabSwitching)) body.child(div().py(2).child(this.rite(t, "noosphere")));
+    else if (!tabPrs.length) body.child(row("sessions", "no session on a git branch", t.dim));
+    for (const g of tabPrs) {
       const pr = g.pr, s = pr ? rollup(pr.statusCheckRollup) : null;
       const who = div().text_size(10.5).text_color(t.dim).truncate().child(`${g.sessions.join(", ")} · ${g.branch} · ${short(g.cwd)}`);
       if (!pr) {
@@ -646,10 +667,10 @@ export default class Auspex extends View {
           .children(jira(`tp-${pr.url}`, pr.title, g.branch))));
     }
     // PR links found in the text of this tab's terminals (newest first).
-    if (this.mentions.length) {
+    if (mentions.length) {
       body.child(div().text_size(10.5).text_color(t.dim).mt(12).mb(4).child("LINKED IN THIS TAB'S TERMINALS"));
       const stateTone = { OPEN: t.done, MERGED: t.ansi5 ?? t.accent, CLOSED: t.blocked };
-      for (const m of this.mentions) {
+      for (const m of mentions) {
         const pr = m.pr, s = pr ? rollup(pr.statusCheckRollup) : null;
         const path = m.url.replace(/^https?:\/\/(www\.)?/, "");
         body.child(v_flex().id(`mention-${m.url}`).py(2).px(2).cursor_pointer().hover((el) => el.bg(t.hover))
