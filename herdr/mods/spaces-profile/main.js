@@ -458,9 +458,11 @@ export default class Spaces extends View {
       .h(rowHeight({ tree }))
       .flex_none()
       .justify_center()
-      .rounded(8)
-      .when(on, (el) => el.bg(t.selected))
-      .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
+      .rounded(0)
+      // The space you're in: amber frame, a thick amber bar on the left, raised background.
+      .when(on, (el) => el.bg(t.raised).border(1).border_color(t.accent)
+        .child(div().absolute().left(0).top(0).bottom(0).w(3).bg(t.accent)))
+      .when(!on, (el) => el.border(1).border_color(t.chrome).hover((s) => s.bg(t.hover)))
       .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === w.id && this.pressed !== w.id, (el) => el.child(
         div().absolute().left(0).right(0).h(2).bg(t.accent)
@@ -497,7 +499,7 @@ export default class Spaces extends View {
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.dim)))
           .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
-          .child(div().flex_initial().min_w(SIDE_MIN).truncate().text_color(t.foreground).child(w.name))
+          .child(div().flex_initial().min_w(SIDE_MIN).truncate().when(on, (el) => el.font_bold()).text_color(on ? t.accent : t.muted).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
           .children(profilesIn("space", w.id).map((p) => badge(t, p, 9))),
       );
@@ -509,13 +511,14 @@ export default class Spaces extends View {
       .relative()
       .w(RAIL_CELL)
       .h(26)
-      .rounded(6)
+      .rounded(0)
       .justify_center()
       .items_center()
-      .when(w.active, (el) => el.bg(t.selected))
+      .when(w.active, (el) => el.bg(t.raised).border(1).border_color(t.accent)
+        .child(div().absolute().left(0).top(0).bottom(0).w(3).bg(t.accent)))
       .when(!w.active, (el) => el.hover((s) => s.bg(t.hover)))
       .on_click(() => run("space.select", { id: w.id }))
-      .child(div().text_color(w.active ? t.foreground : t.muted).child(String(i + 1)))
+      .child(div().when(w.active, (el) => el.font_bold()).text_color(w.active ? t.accent : t.muted).child(String(i + 1)))
       .child(div().absolute().right(5).text_color(tone(t, w.status)).child(glyph(w.status))));
   }
 
