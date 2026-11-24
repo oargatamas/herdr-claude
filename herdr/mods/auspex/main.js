@@ -3,14 +3,16 @@
 //     message in a dialog), submodules with their state and branch (found for detached commits)
 //   PULL-PETITIONS & CI: the PR of every session in the shown tab and PR links found in
 //     those terminals' text, with checks and review state (via gh)
+//   DATA-INTAKE: todos for improving the Herdr mods and Claude, in a markdown file
+//     (~/.local/share/herdr-claude/todos.md); the expand icon shows them all in a dialog
 //   Jira keys (ABC-123) in branches and PR titles get a link to the Jira site seen in sessions
 // AUSPEX: read-only engineering readings for the focused terminal's repository, in the
 // Mechanicus look. It never changes anything: git and gh are only asked questions
 // (git with --no-optional-locks).
 // Polls only while shown; gh answers are cached per branch and link.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
-import { exec, hc, spaces, panes, terminals, focused, layout, theme, window, home, shared, props, openOverlay, closeOverlay, checking } from "herdr";
+import { v_flex, h_flex, InputState, Input } from "gpui-base";
+import { exec, hc, spaces, panes, terminals, focused, layout, theme, window, home, shared, props, openOverlay, closeOverlay, readTextFile, writeTextFile, checking } from "herdr";
 
 // Sidebar animations on unless stilled with a click on the brand emblem.
 const motion = () => shared("mechanicus.motion") !== false;
@@ -81,6 +83,15 @@ async function sh(cmd, args, opts) {
 }
 
 const SUB_EVERY = 30_000;     // submodule details, per repository
+const NOTES_EVERY = 5_000;    // re-read the todo file (cheap, no process)
+
+// DATA-INTAKE todos: a markdown checklist anyone can also edit by hand.
+const notesFile = () => `${home()}/.local/share/herdr-claude/todos.md`;
+const NOTES_HEAD = "# Herdr + Claude improvement notes\n\nTodos added from AUSPEX (DATA-INTAKE). Edit freely: lines like `- [ ] text` are the todos.\n\n";
+// [{ line, done, text }] for every `- [ ] …` / `- [x] …` line; other lines are kept as they are.
+const parseTodos = (text) => (text ?? "").split("\n")
+  .map((l, line) => { const m = l.match(/^\s*[-*] \[([ xX])\] (.*)$/); return m ? { line, done: m[1] !== " ", text: m[2] } : null; })
+  .filter(Boolean);
 
 // The branch a checkout is on; for a detached commit, a branch pointing at it, else the
 // nearest branch containing it (git name-rev, e.g. "origin/main~3": 3 commits below its tip).
@@ -143,6 +154,12 @@ export default class Auspex extends View {
       });
       return;
     }
+    // Opened as the todo dialog: { notes: true }.
+    if (props()?.notes) {
+      this.notesDialog = true;
+      this.initNotes(cx);
+      return;
+    }
     this.subs = {};            // root → { at, list: [{ path, parent, name, url, mark, recorded, ...status, branch, commit }] }
     this.subOpen = new Set();  // opened submodule nodes (repo|path); all start collapsed
     this.repo = null;          // { root, machine, branch, upstream, ahead, behind, staged, unstaged, untracked, conflicts, commit }
@@ -155,6 +172,7 @@ export default class Auspex extends View {
     try { this.jiraSite = localStorage.getItem("jira-site"); } catch { this.jiraSite = null; } // e.g. acme.atlassian.net
     this.tabKeyNow = null;
     this.tabBusy = false;
+    this.initNotes(cx);
     if (checking()) return;
     // Cheap check every 2s (no processes): follow focus changes at once.
     cx.timer.every(2000, (cx) => {
@@ -163,6 +181,7 @@ export default class Auspex extends View {
       if (key !== this.cwdKey || Date.now() - (this.gitAt ?? 0) > GIT_EVERY) this.refresh(cx);
       const tk = this.tabKey();
       if (tk !== this.tabKeyNow || Date.now() - (this.tabAt ?? 0) > MENTION_EVERY) this.loadTab(cx);
+      if (Date.now() - (this.notesAt ?? 0) > NOTES_EVERY) this.loadNotes(cx);
     });
     this.refresh(cx);
     this.loadTab(cx);
@@ -385,7 +404,110 @@ export default class Auspex extends View {
               .children(lines.map((l, i) => l.trim() ? div().whitespace_normal().text_color(i === 0 ? t.accent : t.foreground).child(l) : div().h(8))))));
   }
 
+  // ── DATA-INTAKE: todo notes in notesFile(), shared by the sidebar and the dialog.
+  initNotes(cx) {
+    this.notesText = null;
+    this.todoInput = InputState.new({ placeholder: "New todo for the mods or Claude… (Enter adds)" });
+    this.todoInput.on("submit", (_e, cx) => {
+      const text = this.todoInput.value().replace(/\s+/g, " ").trim();
+      if (!text) return;
+      this.todoInput.set_value("");
+      this.editNotes(cx, (cur) => cur.replace(/\n*$/, "\n") + `- [ ] ${text}\n`);
+    });
+    if (checking()) return;
+    this.loadNotes(cx);
+    if (this.notesDialog) {
+      this.todoInput.focus();
+      cx.timer.after(300, () => this.todoInput.focus());
+      cx.timer.every(NOTES_EVERY, (cx) => this.loadNotes(cx));
+    }
+  }
+
+  loadNotes(cx) {
+    this.notesAt = Date.now();
+    cx.spawn(async (cx) => {
+      const text = await readTextFile(notesFile()).catch(() => null);
+      if (text !== this.notesText) { this.notesText = text; cx.notify(); }
+    });
+  }
+
+  // Read-modify-write with a stale-snapshot check, so the sidebar and the dialog never overwrite each other.
+  editNotes(cx, change) {
+    cx.spawn(async (cx) => {
+      await exec("mkdir", ["-p", notesFile().replace(/\/[^/]+$/, "")]).catch(() => null);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const cur = await readTextFile(notesFile()).catch(() => null);
+        const next = change(cur ?? NOTES_HEAD);
+        try { await writeTextFile(notesFile(), next, cur); this.notesText = next; break; } catch { /* changed meanwhile: retry */ }
+      }
+      cx.notify();
+    });
+  }
+
+  // Toggle or delete one todo; finds it by line, else by its text (if the file moved lines).
+  changeTodo(cx, item, remove) {
+    this.editNotes(cx, (cur) => {
+      const lines = cur.split("\n");
+      const same = (l) => { const m = l.match(/^\s*[-*] \[([ xX])\] (.*)$/); return m && m[2] === item.text; };
+      const i = same(lines[item.line] ?? "") ? item.line : lines.findIndex(same);
+      if (i < 0) return cur;
+      if (remove) lines.splice(i, 1);
+      else lines[i] = lines[i].replace(/\[([ xX])\]/, (_m, c) => (c === " " ? "[x]" : "[ ]"));
+      return lines.join("\n");
+    });
+  }
+
+  openNotes() {
+    openOverlay({ mod: "auspex", kind: "dialog", width: 760, height: 0.7, props: { notes: true } });
+  }
+
+  // The add-a-todo field, as used in the sidebar and the dialog.
+  todoField(t, id) {
+    return div().id(id).h(28).px(8).flex().items_center().border(1).border_color(t.input).bg(t.background).cursor_text()
+      .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.todoInput.focus(); })
+      .child(Input.new(this.todoInput).w_full().text_size(12).text_color(t.foreground));
+  }
+
+  todoRow(t, item, full) {
+    return h_flex().id(`todo-${item.line}-${full ? "f" : "s"}`).gap(6).items_start().py(2).text_size(12)
+      .child(div().id(`todo-box-${item.line}-${full ? "f" : "s"}`).flex_none().w(14).cursor_pointer()
+        .text_color(item.done ? t.done : t.accent).hover((el) => el.text_color(t.foreground))
+        .tooltip(item.done ? "Mark as open" : "Mark as done")
+        .on_click((_e, cx) => { cx.stop_propagation(); this.changeTodo(cx, item, false); })
+        .child(item.done ? "☑" : "☐"))
+      .child(full
+        ? div().flex_1().min_w(0).whitespace_normal().text_color(item.done ? t.dim : t.foreground).child(item.text)
+        : div().flex_1().min_w(0).truncate().text_color(t.foreground).child(item.text))
+      .when(full, (el) => el.child(div().id(`todo-del-${item.line}`).flex_none().px(4).cursor_pointer().text_color(t.dim)
+        .hover((s) => s.text_color(t.blocked)).tooltip("Delete")
+        .on_click((_e, cx) => { cx.stop_propagation(); this.changeTodo(cx, item, true); })
+        .child(svg("mods/chrome-mechanicus/x.svg").size(11))));
+  }
+
+  renderNotesDialog() {
+    const t = theme(), todos = parseTodos(this.notesText);
+    const open = todos.filter((x) => !x.done), done = todos.filter((x) => x.done);
+    const path = notesFile().replace(home(), "~");
+    return v_flex().size_full().bg(t.popover).border(1).border_color(t.accent)
+      .child(h_flex().h(36).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.input).text_size(12).text_color(t.accent)
+        .child(svg("mods/chrome-mechanicus/gear.svg").size(13).when(motion(), (g) => g.spin(9000)))
+        .child("DATA-INTAKE · improvement notes").child(div().flex_1())
+        .child(div().text_size(10.5).text_color(t.dim).child(`${open.length} open · ${done.length} done`))
+        .child(div().id("close-notes").px(6).cursor_pointer().text_color(t.dim).hover((el) => el.text_color(t.foreground))
+          .on_click(() => closeOverlay(props().overlay)).child(svg("mods/chrome-mechanicus/x.svg").size(13))))
+      .child(div().px(14).pt(12).child(this.todoField(t, "todo-field-dialog")))
+      .child(div().id("notes-scroll").flex_1().min_h(0).px(14).py(10).overflow_y_scrollbar()
+        .child(v_flex().gap(2)
+          .when(!todos.length, (el) => el.child(div().text_size(12).text_color(t.dim).child(this.notesText === null ? "No notes yet." : "No todos in the file yet.")))
+          .children(open.map((x) => this.todoRow(t, x, true)))
+          .when(done.length > 0, (el) => el.child(div().mt(10).mb(2).text_size(10.5).text_color(t.dim).child(`DONE · ${done.length}`)))
+          .children(done.map((x) => this.todoRow(t, x, true)))))
+      .child(h_flex().h(30).flex_none().px(14).items_center().border_t(1).border_color(t.input).text_size(10.5).text_color(t.dim)
+        .child(`${path} · a markdown checklist; edit it in any editor too`));
+  }
+
   render() {
+    if (this.notesDialog) return this.renderNotesDialog();
     if (this.dialog) return this.renderDialog();
     const t = theme();
     const tone = (s) => ({ pass: t.done, fail: t.blocked, pending: t.working, idle: t.dim }[s] ?? t.dim);
@@ -518,6 +640,22 @@ export default class Auspex extends View {
             .child(div().flex_1().min_w(0).text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${path}`))
             .children(jira(`mp-${m.url}`, pr?.title))));
       }
+    }
+
+    // ── DATA-INTAKE: todos for improving the mods and Claude
+    {
+      const todos = parseTodos(this.notesText), open = todos.filter((x) => !x.done);
+      body.child(heading("✎", "DATA-INTAKE", `${open.length} open`)
+        .child(div().id("notes-expand").flex_none().p(1).cursor_pointer().text_color(t.dim)
+          .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Show all notes")
+          .on_click((_e, cx) => { cx.stop_propagation(); this.openNotes(); })
+          .child(svg("mods/chrome-mechanicus/panel-right.svg").size(12))));
+      body.child(this.todoField(t, "todo-field"));
+      const shown = open.slice(-6).reverse(); // newest first
+      body.child(v_flex().mt(4).children(shown.map((x) => this.todoRow(t, x, false))));
+      if (open.length > shown.length)
+        body.child(div().id("notes-more").text_size(11).text_color(t.dim).cursor_pointer().hover((el) => el.text_color(t.accent))
+          .on_click((_e, cx) => { cx.stop_propagation(); this.openNotes(); }).child(`+${open.length - shown.length} more…`));
     }
 
     const sidebar = find(layout(), "sidebar");
