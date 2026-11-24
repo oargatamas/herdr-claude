@@ -1,7 +1,7 @@
 // AUSPEX sections:
 //   REPO-SPIRIT: git branch, upstream ahead/behind, dirty counts, last commit (icon: full
 //     message in a dialog), submodules with their state and branch (found for detached commits)
-//   PULL-PETITIONS & CI: the PR of every session in the shown tab and PR links found in
+//   PULL-PETITIONS & CI: (a failing PR gets a DIAGNOSE button: Claude in a split, asked why) the PR of every session in the shown tab and PR links found in
 //     those terminals' text, with checks and review state (via gh)
 //   DATA-INTAKE: todos for improving the Herdr mods and Claude, in a markdown file
 //     (~/.local/share/herdr-claude/todos.md); the expand icon shows them all in a dialog
@@ -12,7 +12,7 @@
 // Polls only while shown; gh answers are cached per branch and link.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { exec, hc, spaces, panes, terminals, focused, layout, theme, window, home, shared, props, openOverlay, closeOverlay, readTextFile, writeTextFile, checking } from "herdr";
+import { exec, hc, run, spaces, panes, terminals, focused, layout, theme, window, home, shared, props, openOverlay, closeOverlay, readTextFile, writeTextFile, checking } from "herdr";
 
 // Sidebar animations on unless stilled with a click on the brand emblem.
 const motion = () => shared("mechanicus.motion") !== false;
@@ -239,6 +239,7 @@ export default class Auspex extends View {
     const space = spaces().find((s) => s.id === f?.space) ?? spaces().find((s) => s.active);
     const tab = f?.tab ?? space?.tabs?.find((x) => x.active)?.id;
     const found = new Map(); // url → names
+    const where = new Map(); // url → folder of the first session it was seen in
     let site = null;
     for (const p of panes().filter((x) => x.tab === tab && x.terminal)) {
       const r = await hc(["read", p.terminal, "--lines", String(p.scroll ? MENTION_LINES : 0)]).catch(() => null);
@@ -259,6 +260,7 @@ export default class Auspex extends View {
         if (!names.includes(name)) names.push(name);
         found.delete(url); // re-insert: Map order = last seen, newest at the end
         found.set(url, names);
+        if (!where.has(url) && p.cwd) where.set(url, p.cwd);
       }
     }
     if (site && site !== this.jiraSite) {
@@ -276,7 +278,7 @@ export default class Auspex extends View {
     }));
     const own = new Set(this.tabPrs.map((g) => g.pr?.url).filter(Boolean));
     this.mentions = [...found.entries()].filter(([url]) => !own.has(url)).slice(-12).reverse()
-      .map(([url, sessions]) => ({ url, sessions, pr: this.urlCache[url]?.pr ?? null }));
+      .map(([url, sessions]) => ({ url, sessions, cwd: where.get(url) ?? null, pr: this.urlCache[url]?.pr ?? null }));
   }
 
   // One `gh pr list --head <branch>` per session branch, cached GH_TTL; sessions on the same PR merge.
@@ -327,6 +329,16 @@ export default class Auspex extends View {
     const left = SWITCH_MIN - (Date.now() - since);
     if (left <= 0) { this[name] = null; return; }
     cx.timer.after(left, (cx) => { if (this[name] === since) { this[name] = null; cx.notify(); } });
+  }
+
+  // DIAGNOSE: Claude in a new split beside the focused pane, in `folder`, asked why the PR's checks fail.
+  // claude-ws picks the workspace's Claude profile; the prompt asks it to diagnose only.
+  diagnose(pr, folder) {
+    const prompt = `The pull request ${pr.url} (#${pr.number} "${pr.title}") has failing checks. ` +
+      `Find out why: list its checks (gh pr checks ${pr.url}), read the logs of the failed ones ` +
+      `(gh run view <run-id> --log-failed), and compare with the PR's changes. Explain the root cause ` +
+      `and propose a fix. Only diagnose: don't change files, commit or push until I say so.`;
+    run("terminal.open", { place: "right", folder: folder ?? home(), name: `diagnose #${pr.number}`, argv: ["claude-ws", "--", prompt] });
   }
 
   // Opens a PR in the browser (only on a click).
@@ -568,6 +580,12 @@ export default class Auspex extends View {
         .child(svg("mods/chrome-mechanicus/file-text.svg").size(12)));
     const plate = (text, color) => div().flex_none().px(4).border(1).border_color(color).text_color(color).text_size(10)
       .when(text === "IN RITE" && motion(), (el) => el.loop("opacity", { from: 0.35, to: 1, period: 1200 })).child(text);
+    // ⚕ DIAGNOSE for a PR whose checks fail (CORRUPTED).
+    const diagnoseBtn = (id, pr, folder) => div().id(`${id}-diagnose`).flex_none().px(4).border(1).border_color(t.blocked)
+      .text_color(t.blocked).text_size(10).cursor_pointer().hover((el) => el.bg(t.blocked).text_color(t.background))
+      .tooltip("Open Claude in a split here to find out why the checks fail")
+      .on_click((_e, cx) => { cx.stop_propagation(); this.diagnose(pr, folder); })
+      .child("⚕ DIAGNOSE");
     // Clickable Jira chips for the keys in these texts (nothing without a known Jira site).
     const jira = (id, ...texts) => {
       const site = this.jiraSite, keys = site ? jiraKeys(...texts) : [];
@@ -664,6 +682,7 @@ export default class Auspex extends View {
           .child(plate(s ? word(s) : "—", tone(s))))
         .child(h_flex().gap(4).items_center()
           .child(div().flex_1().min_w(0).text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${pr.url.replace(/^https?:\/\//, "")}`))
+          .when(s === "fail", (el) => el.child(diagnoseBtn(`tp-${pr.url}`, pr, g.cwd)))
           .children(jira(`tp-${pr.url}`, pr.title, g.branch))));
     }
     // PR links found in the text of this tab's terminals (newest first).
@@ -685,6 +704,7 @@ export default class Auspex extends View {
             .when(pr.state === "OPEN", (el) => el.child(plate(s ? word(s) : "—", tone(s))))))
           .child(h_flex().gap(4).items_center()
             .child(div().flex_1().min_w(0).text_size(10.5).text_color(t.ansi4 ?? t.muted).truncate().child(`↗ ${path}`))
+            .when(Boolean(pr) && pr.state === "OPEN" && s === "fail", (el) => el.child(diagnoseBtn(`mp-${m.url}`, pr, m.cwd)))
             .children(jira(`mp-${m.url}`, pr?.title))));
       }
     }
