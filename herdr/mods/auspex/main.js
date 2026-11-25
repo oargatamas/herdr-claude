@@ -463,10 +463,16 @@ export default class Auspex extends View {
   initNotes(cx) {
     this.notesText = null;
     this.todoInput = InputState.new({ placeholder: "New todo for the mods or Claude… (Enter adds)" });
+    // The todo being typed is kept (per sidebar / dialog) so a mod reload, e.g. an install while
+    // fabricating, doesn't lose it; it is cleared once added.
+    const draftKey = `todo-draft:${this.notesDialog ? "dialog" : "sidebar"}`;
+    try { const d = localStorage.getItem(draftKey); if (d) this.todoInput.set_value(d); } catch {}
+    this.todoInput.on("change", () => { try { localStorage.setItem(draftKey, this.todoInput.value()); } catch {} });
     this.todoInput.on("submit", (_e, cx) => {
       const text = this.todoInput.value().replace(/\s+/g, " ").trim();
       if (!text) return;
       this.todoInput.set_value("");
+      try { localStorage.removeItem(draftKey); } catch {}
       this.editNotes(cx, (cur) => cur.replace(/\n*$/, "\n") + `- [ ] ${text}\n`);
     });
     this.fab = null;
