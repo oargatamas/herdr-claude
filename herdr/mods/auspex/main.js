@@ -3,7 +3,7 @@
 //     message in a dialog), submodules with their state and branch (found for detached commits)
 //   PULL-PETITIONS & CI: (a failing PR gets a DIAGNOSE button: Claude in a split, asked why) the PR of every session in the shown tab and PR links found in
 //     those terminals' text, with checks and review state (via gh)
-//   DATA-INTAKE: todos for improving the Herdr mods and Claude, in a markdown file
+//   DATA-LITANY: todos for improving the Herdr mods and Claude, in a markdown file
 //     (~/.local/share/herdr-claude/todos.md); the expand icon shows them all in a dialog
 //   Jira keys (ABC-123) in branches and PR titles get a link to the Jira site seen in sessions
 // AUSPEX: read-only engineering readings for the focused terminal's repository, in the
@@ -97,9 +97,9 @@ const RITES = {
 const riteFrames = (kind) => RITES[kind].flatMap((l) => [`${l}.`, `${l}..`, `${l}...`, `${l}...`]);
 const PULSE = ["▰▱▱▱▱", "▰▰▱▱▱", "▰▰▰▱▱", "▱▰▰▰▱", "▱▱▰▰▰", "▱▱▱▰▰", "▱▱▱▱▰", "▱▱▱▱▱"];
 
-// DATA-INTAKE todos: a markdown checklist anyone can also edit by hand.
+// DATA-LITANY todos: a markdown checklist anyone can also edit by hand.
 const notesFile = () => `${home()}/.local/share/herdr-claude/todos.md`;
-const NOTES_HEAD = "# Herdr + Claude improvement notes\n\nTodos added from AUSPEX (DATA-INTAKE). Edit freely: lines like `- [ ] text` are the todos.\n\n";
+const NOTES_HEAD = "# Herdr + Claude improvement notes\n\nTodos added from AUSPEX (DATA-LITANY). Edit freely: lines like `- [ ] text` are the todos.\n\n";
 // [{ line, done, text }] for every `- [ ] …` / `- [x] …` line; other lines are kept as they are.
 const parseTodos = (text) => (text ?? "").split("\n")
   .map((l, line) => { const m = l.match(/^\s*[-*] \[([ xX])\] (.*)$/); return m ? { line, done: m[1] !== " ", text: m[2] } : null; })
@@ -454,7 +454,7 @@ export default class Auspex extends View {
       .when(!compact, (el) => el.child(div().flex_none().text_size(9).text_color(t.accent).frames(PULSE, 140)));
   }
 
-  // ── DATA-INTAKE: todo notes in notesFile(), shared by the sidebar and the dialog.
+  // ── DATA-LITANY: todo notes in notesFile(), shared by the sidebar and the dialog.
   initNotes(cx) {
     this.notesText = null;
     this.todoInput = InputState.new({ placeholder: "New todo for the mods or Claude… (Enter adds)" });
@@ -543,7 +543,7 @@ export default class Auspex extends View {
     return v_flex().size_full().bg(t.popover).border(1).border_color(t.accent)
       .child(h_flex().h(36).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.input).text_size(12).text_color(t.accent)
         .child(svg("mods/chrome-mechanicus/gear.svg").size(13).when(motion(), (g) => g.spin(9000)))
-        .child("DATA-INTAKE · improvement notes").child(div().flex_1())
+        .child("DATA-LITANY · improvement notes").child(div().flex_1())
         .child(div().text_size(10.5).text_color(t.dim).child(`${open.length} open · ${done.length} done`))
         .child(div().id("close-notes").px(6).cursor_pointer().text_color(t.dim).hover((el) => el.text_color(t.foreground))
           .on_click(() => closeOverlay(props().overlay)).child(svg("mods/chrome-mechanicus/x.svg").size(13))))
@@ -709,10 +709,10 @@ export default class Auspex extends View {
       }
     }
 
-    // ── DATA-INTAKE: todos for improving the mods and Claude
+    // ── DATA-LITANY: todos for improving the mods and Claude
     {
       const todos = parseTodos(this.notesText), open = todos.filter((x) => !x.done);
-      body.child(heading("✎", "DATA-INTAKE", `${open.length} open`)
+      body.child(heading("✎", "DATA-LITANY", `${open.length} open`)
         .child(div().id("notes-expand").flex_none().p(1).cursor_pointer().text_color(t.dim)
           .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Show all notes")
           .on_click((_e, cx) => { cx.stop_propagation(); this.openNotes(); })
