@@ -11,11 +11,13 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, EditorState, Editor, TextView } from "gpui-base";
-import { theme, home, shared, setShared, props, openOverlay, closeOverlay, readTextFile, checking } from "herdr";
+import { theme, settings, home, shared, setShared, props, openOverlay, closeOverlay, readTextFile, checking } from "herdr";
 
 const motion = () => shared("mechanicus.motion") !== false;
 const REQUEST = () => `${home()}/.local/share/herdr-claude/scriptorium`;
 const EVERY = 1000;
+// The render is set at the terminals' font size (settings.json / the layout), so it reads like them.
+const renderSize = () => { const n = Number(settings()?.font_size); return n > 0 ? n : 13; };
 const MODES = [["source", "SOURCE"], ["split", "SPLIT"], ["render", "RENDER"]];
 
 // The latest request: { path, id }; a bare path (as earlier versions wrote) is its own id.
@@ -122,7 +124,7 @@ export default class Scriptorium extends View {
     else if (this.text == null) body = div().p(16).text_color(t.dim).text_size(12).child("Retrieving the data-slate…");
     else {
       const src = pane("◇ SOURCE", Editor.new(this.source).size_full(), stopOnly);
-      const rendered = pane("◆ RENDER", div().id("render-scroll").size_full().px(16).py(10).overflow_y_scrollbar()
+      const rendered = pane("◆ RENDER", div().id("render-scroll").size_full().px(16).py(10).text_size(renderSize()).overflow_y_scrollbar()
         .child(TextView.markdown("render", this.text).selectable(true)));
       body = h_flex().size_full().min_h(0)
         .when(this.mode !== "render", (el) => el.child(src))
