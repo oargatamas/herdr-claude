@@ -24,7 +24,7 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
 ### Notes for Claude when installing
 
 - Read `install.sh` before running it. It only writes: `~/.local/bin/{claude-ws,hc-worker}`,
-  `~/.claude/{statusline-account.sh,herdr-profile-label.sh}`, the `hc-parallel-dev` skill, a
+  `~/.claude/{statusline-account.sh,herdr-profile-label.sh}`, the `hc-parallel-dev` and `reconsecrate` skills, a
   marked block in each profile's `CLAUDE.md`, merged entries in each profile's `settings.json`,
   and its own mods, layout and keys under `~/.config/herdr-app`. Backups:
   `*.bak-herdr-claude-<time>` next to every settings file it changes.
@@ -60,6 +60,8 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
   orchestrator (or tabs) in git worktrees, each on a model and effort the orchestrator picks from
   the task's complexity (`haiku`/`sonnet`/`opus`, `hc-worker start --model … --effort …`) (`hc-worker start`), coordination with `hc send` / `hc wait`, review, merge, cleanup
   (`hc-worker stop`, `hc-worker prune`).
+- **`reconsecrate` skill**: "update herdr-claude" → local changes in the clone set aside
+  (stash / backup branch), reset to `origin/main`, `install.sh` run again.
 - **`CLAUDE.md` block**: every session knows it runs in Herdr and about these commands.
 - **Permissions**: `hc`, `herdr-app`, `hc-worker`, `claude-ws` run without prompts; `hc keys`
   (answering another session's dialogs) is denied.
@@ -137,6 +139,7 @@ sidebar.
 | `claude/settings.fragment.json` | Merged into each profile's `settings.json` |
 | `claude/CLAUDE.md` | Managed block in each profile's `CLAUDE.md` |
 | `claude/skills/hc-parallel-dev/` | The skill (linked into every profile) |
+| `claude/skills/reconsecrate/` | Update skill: resets this clone to `origin/main` (local work kept in a stash / backup branch) and runs `install.sh` (linked into every profile) |
 | `herdr/mods/claude-space/` | The `cmd-shift-n` form |
 | `herdr/mods/claude-fork*/` | Fork into a tab, or a split per direction (a shortcut can't pass arguments to a mod) |
 | `herdr/shared/fork.js` | Copied into every `claude-fork*` mod (mods can't import across folders) |

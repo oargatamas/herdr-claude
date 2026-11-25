@@ -64,13 +64,19 @@ say "Claude Code hook and status-line scripts → $MAIN"
 mkdir -p "$MAIN"
 for f in statusline-account.sh herdr-profile-label.sh; do install -m 0755 "$REPO/claude/$f" "$HOME/.claude/$f"; ok "$f"; done
 
-say "Skill hc-parallel-dev"
-mkdir -p "$MAIN/skills"; rm -rf "$MAIN/skills/hc-parallel-dev"; cp -R "$REPO/claude/skills/hc-parallel-dev" "$MAIN/skills/"
-ok "$MAIN/skills/hc-parallel-dev"
-for p in "${PROFILES[@]:1}"; do
-  mkdir -p "$p/skills"; rm -rf "$p/skills/hc-parallel-dev"; ln -s "$MAIN/skills/hc-parallel-dev" "$p/skills/hc-parallel-dev"
-  ok "$p/skills/hc-parallel-dev → $MAIN/skills/hc-parallel-dev"
+say "Skills"
+mkdir -p "$MAIN/skills"
+for sk in "$REPO"/claude/skills/*/; do
+  sk=$(basename "$sk")
+  rm -rf "$MAIN/skills/$sk"; cp -R "$REPO/claude/skills/$sk" "$MAIN/skills/"
+  ok "$MAIN/skills/$sk"
+  for p in "${PROFILES[@]:1}"; do
+    mkdir -p "$p/skills"; rm -rf "$p/skills/$sk"; ln -s "$MAIN/skills/$sk" "$p/skills/$sk"
+    ok "$p/skills/$sk → $MAIN/skills/$sk"
+  done
 done
+# reconsecrate updates from this clone: tell it where the clone is.
+echo "$REPO" > "$MAIN/skills/reconsecrate/repo-path"
 
 say "CLAUDE.md (a marked block; the rest of the file is left as it is)"
 BEGIN="<!-- herdr-claude:begin (managed by herdr-claude/install.sh; edit the repo, not this block) -->"
@@ -244,5 +250,5 @@ if [ "$HERDR" = 1 ]; then
 fi
 
 say "Done$([ "$WARNINGS" -gt 0 ] && echo ", with $WARNINGS warning(s) above")."
-echo "  New Claude sessions pick up the hooks, status line, skill and permissions."
+echo "  New Claude sessions pick up the hooks, status line, skills and permissions."
 echo "  Sessions already running: restart them once (so their session id is recorded for forks)."
