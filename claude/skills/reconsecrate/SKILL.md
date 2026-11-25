@@ -13,7 +13,7 @@ to a stash and unpushed commits to a backup branch, and you tell the person both
 ## 1. Find the clone
 
 ```bash
-REPO=$(cat ~/.claude/skills/reconsecrate/repo-path 2>/dev/null || echo ~/projects/herdr-claude)
+REPO=$(cat ~/.local/share/herdr-claude/repo 2>/dev/null || echo ~/projects/herdr-claude)   # written by install.sh
 git -C "$REPO" remote get-url origin   # must point at a herdr-claude repository
 ```
 

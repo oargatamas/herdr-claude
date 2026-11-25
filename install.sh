@@ -83,8 +83,10 @@ for sk in "$REPO"/claude/skills/*/; do
     ok "$p/skills/$sk → $MAIN/skills/$sk"
   done
 done
-# reconsecrate updates from this clone: tell it where the clone is.
-echo "$REPO" > "$MAIN/skills/reconsecrate/repo-path"
+# Where the clone is, for reconsecrate, fabricate and petition. Run from a worktree (fabricate's
+# litany), it still records the main clone.
+CLONE=$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$REPO/.git")")
+mkdir -p "$HOME/.local/share/herdr-claude"; echo "$CLONE" > "$HOME/.local/share/herdr-claude/repo"
 
 say "CLAUDE.md (a marked block; the rest of the file is left as it is)"
 BEGIN="<!-- herdr-claude:begin (managed by herdr-claude/install.sh; edit the repo, not this block) -->"
