@@ -59,6 +59,12 @@ const kidStatus = (k, listed) => {
   const s = listed.get(k.address) ?? k.status;
   return s === "error" ? "blocked" : s === "done" ? "idle" : s;
 };
+// Servitors without a pane that ask to be listed: a live root terminal labelled
+// herdr.servitor=<name> (AUSPEX's augmentor; herdr.fabricate is its label from before).
+// They get a NOOSPHERE group of their own and are peeked at, never given a tab here.
+const unseenName = (k) => k.labels?.["herdr.servitor"] || (k.labels?.["herdr.fabricate"] ? "Augmentor" : null);
+const rawStatus = (k) => (typeof k.status === "object" ? k.status?.state : k.status) ?? "idle";
+
 const SORTS = [
   { id: "priority", label: "Priority", icon: "clock" },
   { id: "grouped", label: "Grouped by space", icon: "layers" },
@@ -254,6 +260,7 @@ export default class Agents extends View {
     const rest = list.filter((a) => !a.pinned);
     list = [...pinned, ...rest];
     setAgentOrder(list.map((a) => a.address));
+    const unseen = all.filter((k) => k.state === "live" && !k.parent && !this.listed.has(k.address) && unseenName(k));
 
     const withKids = (a, i) => {
       const subs = collapsed ? [] : this.tree(all, a.address);
@@ -419,9 +426,33 @@ export default class Agents extends View {
           .when(!byPriority && top && top !== "idle", (el) => el.child(this.status(t, { status: top }, true)))
           .child(svg("mods/workspace-chrome/chevron-right.svg").size(11).flex_none().text_color(t.dim)));
     };
-    const rows = collapsed
+    // A servitor without a pane: its name, status, a click peeks at its terminal over the tab.
+    const unseenRow = (k) => {
+      const st = kidStatus({ ...k, status: rawStatus(k) }, this.listed);
+      const pic = icon(k.program, 16, t.foreground);
+      return h_flex()
+        .id(`unseen-${k.address}`)
+        .px(8)
+        .h(collapsed ? 26 : 30)
+        .flex_none()
+        .rounded(0)
+        .items_center()
+        .gap(collapsed ? 4 : 9)
+        .cursor_pointer()
+        .hover((s) => s.bg(t.hover))
+        .tooltip(`${unseenName(k)}: runs without a pane. Click to peek at its terminal`)
+        .on_click(() => this.peek(k.address))
+        .when(collapsed, (el) => el.child(div().flex_1().min_w(0).text_right().text_color(t.muted).child("⚙")))
+        .when(!collapsed && Boolean(pic), (el) => el.child(pic))
+        .when(!collapsed, (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(unseenName(k))))
+        .child(this.status(t, { status: st }, collapsed));
+    };
+    const noosphere = { id: "noosphere", label: "Noosphere", status: null, members: unseen.map((k) => ({ status: kidStatus({ ...k, status: rawStatus(k) }, this.listed) })) };
+    const unseenRows = !unseen.length ? [] : collapsed ? unseen.map(unseenRow)
+      : [header(noosphere), ...(this.folded.has("noosphere") ? [] : unseen.map(unseenRow))];
+    const rows = [...unseenRows, ...(collapsed
       ? list.flatMap(withKids)
-      : groups.flatMap((g) => [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]);
+      : groups.flatMap((g) => [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]))];
 
     return this.withSweep(t, 11000, v_flex()
       .size_full()
@@ -456,7 +487,7 @@ export default class Agents extends View {
             ),
         ),
       )
-      .when(list.length === 0 && !collapsed, (el) =>
+      .when(list.length === 0 && unseen.length === 0 && !collapsed, (el) =>
         el.child(div().px(12).text_size(12).text_color(t.dim).child("No agent status yet. Agents show up here when they report their status. Older versions and agents inside tmux may not.")),
       )
       .child(v_flex().id("ag-list").flex_1().min_h(0).px(collapsed ? 0 : 8).overflow_y_scrollbar().mode("always").children(rows))
