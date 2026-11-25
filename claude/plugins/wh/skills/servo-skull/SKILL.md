@@ -35,7 +35,7 @@ Don't ask the person to confirm the choice: say it in one line when you report t
 ## 2. Run
 
 ```sh
-<base>/split.sh [right|down] [--model M --effort E] [--folder DIR] [--fork] [--profile company|personal] [-- <claude args>]
+<base>/split.sh [right|down] [--model M --effort E] [--folder DIR] [--fork] [--child] [--profile company|personal] [-- <claude args>]
 ```
 
 (`<base>` is the "Base directory for this skill" shown when it loads: the skill lives in the `wh` plugin, not in `~/.claude/skills`)
@@ -53,6 +53,10 @@ Don't ask the person to confirm the choice: say it in one line when you report t
   the `herdr.profile` / `herdr.claude-session` labels, like the person's `cmd-shift-<arrow>` keys.
 - A task given as the first prompt runs straight away; write it as a complete brief (goal, scope,
   how to check it), because the new session knows nothing of this conversation unless `--fork`.
+- `--child` (for skills whose skulls report back, like `wh:augment`) starts Claude as an hc child
+  of this terminal and then has Herdr keep it in the split, so SERVITORS shows it as this
+  session's sub-agent. It outlives this session and types no exit note into it. Leave it off
+  for a session opened for the person: theirs stays independent.
 - `--fork` copies the whole conversation; mention that it is costly when it is long.
 - A folder outside a trusted project shows Claude's folder-trust prompt in the new pane.
   Never answer it yourself (no `hc keys`, no forced sends): tell the person which pane needs them.
