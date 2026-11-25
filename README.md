@@ -62,7 +62,7 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
   (`hc-worker stop`, `hc-worker prune`).
 - **`wh:augment` and `wh:petition` skills**: "augment" (or AUSPEX's AUGMENT button, which opens it in an
   AUGMENTORIUM space in the background) → Claude watches AUSPEX's AUGMENTATIONS (the self-improvement notes) and sends a
-  servo-skull for each open one, in parallel, each in its own worktree; their commits land one per note on an augment branch (marking each note done with its commit);
+  servo-skull for each open one (SERVITORS shows them as its sub-agents), in parallel, each in its own worktree; their commits land one per note on an augment branch (marking each note done with its commit);
   "petition" → that branch goes up as one PR.
 - **`wh:scriptorium` skill**: "show me README.md" → the file opens in a SCRIPTORIUM window (one per file, several at once), a floating
   Herdr window showing its render, with its source a click away (SOURCE / SPLIT), following edits live.
@@ -149,7 +149,7 @@ sidebar.
 | `.claude-plugin/marketplace.json` | The `herdr-claude` plugin marketplace (one plugin, `wh`); `install.sh` copies it with the plugin to `~/.local/share/herdr-claude/marketplace` and installs `wh@herdr-claude` in every profile |
 | `claude/plugins/wh/` | The `wh` plugin: the Mechanicus skills, called `/wh:<name>` and also by their lore names |
 | `claude/plugins/wh/skills/conclave/` | Parallel workers skill |
-| `claude/plugins/wh/skills/servo-skull/` | Opens one Claude beside you in a split, fresh or a fork (`split.sh`) |
+| `claude/plugins/wh/skills/servo-skull/` | Opens one Claude beside you in a split, fresh or a fork (`split.sh`; `--child` makes it an hc child of the caller, so SERVITORS nests it there: wh:augment's skulls) |
 | `claude/plugins/wh/skills/reconsecrate/` | Update skill: resets this clone to `origin/main` (local work kept in a stash / backup branch) and runs `install.sh` |
 | `claude/plugins/wh/skills/augment/` | Watches the AUGMENTATIONS notes (`augment-watch.sh`), sends a servo-skull per note (up to 4 at once, worktrees in `<clone>/.claude/worktrees/augment-<id>`, reporting back with `hc send`) and cherry-picks each one's commit onto an `augment/<time>` branch, in a worktree at `~/.local/share/herdr-claude/augment` (takes over an unpublished `litany` one from before the rename) |
 | `claude/plugins/wh/skills/scriptorium/` | Opens a markdown file in the scriptorium mod (`open-md.sh <file>`: writes `{path, id}` to `~/.local/share/herdr-claude/scriptorium`, then `mod.open scriptorium` unless one is open, which then opens a window for the file) |
