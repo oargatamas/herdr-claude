@@ -12,6 +12,8 @@
 // window is as big as this mod says: grab its right edge, bottom edge or bottom-right corner and
 // drag. Herdr anchors a window at its top left, so the left and top edges don't stretch (drag the
 // window by its title instead). The size is kept per file (shared, per Herdr home).
+// The look: Mechanicus, with the auspex scanner (a faint grey line sweeping over the slate's body,
+// only while motion is on) and a turning gear in the title.
 // Read-only: it never writes the file. It lives inside a Herdr window, like every mod overlay:
 // open-md.sh puts it in the SCRIPTORIUM window (a second Herdr window with its own home, see
 // herdr/scriptorium-window), which can go to another display; `--here` puts it in yours.
@@ -210,7 +212,13 @@ export default class Scriptorium extends View {
           .hover((el) => el.text_color(t.foreground)).tooltip("Close this window (Esc)")
           .on_mouse_down("left", stop).on_click(() => closeOverlay(props().overlay))
           .child(svg("mods/chrome-mechanicus/x.svg").size(13))))
-      .child(v_flex().flex_1().min_h(0).child(body));
+      // The body, with the auspex scanner over it (a faint grey line sweeping down and up, as in the
+      // other mods): clear of the title bar and the grips, and it takes no presses.
+      .child(div().id("scriptorium-body").relative().flex_1().min_h(0)
+        .on_size_change((size, cx) => { if (Math.abs((this.bodyH ?? 0) - size.height) > 1) { this.bodyH = size.height; cx.notify(); } })
+        .child(v_flex().size_full().min_h(0).child(body))
+        .when(motion() && (this.bodyH ?? 0) > 20, (el) => el.child(div().absolute().left(0).right(0).top(0).h(2).bg(t.muted).opacity(0.22)
+          .loop("top", { from: 0, to: this.bodyH - 2, period: 9000, easing: "linear" }))));
     // The grips: a strip just outside the right and bottom edges (over the 1px border, clear of
     // the render's scrollbar) and the corner, marked with a brass bracket.
     const grip = (id, edge, el) => el.id(id).absolute().on_mouse_down("left", (e, cx) => this.grab(edge, e, cx));
