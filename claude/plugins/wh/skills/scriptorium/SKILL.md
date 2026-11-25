@@ -5,35 +5,47 @@ description: Open a markdown file in the SCRIPTORIUM, a floating Herdr window sh
 
 # Scriptorium
 
-The `scriptorium` Herdr mod shows markdown files in floating windows, one window per file (drag
-each anywhere; it reopens where it was dropped). A window opens on the render; SOURCE and SPLIT
-(source beside render) are a click away. It re-reads its file every second, so edits show while
-it is open.
+The `scriptorium` Herdr mod shows markdown files in floating windows (data-slates), one per file.
+Drag one by its title to move it; drag its right edge, bottom edge or bottom-right corner to
+resize it. It reopens where it was dropped, at the size it was given. A window opens on the
+render, with SOURCE and SPLIT (source beside render) a click away. It re-reads its file every
+second, so edits show while it is open.
+
+By default the files go to the **SCRIPTORIUM window**: a second, separate Herdr window (its own
+home, `~/.local/share/herdr-claude/scriptorium-window`) that shows no spaces or terminals, only
+a Mechanicus desk with the data-slates floating on it. It is a normal OS window, so the person
+can keep it on another display. The script starts it if it isn't running.
 
 ## Open a file
 
 ```bash
-<base>/open-md.sh <path/to/file.md>
+<base>/open-md.sh <path/to/file.md>          # in the SCRIPTORIUM window
+<base>/open-md.sh --here <path/to/file.md>   # in the person's own Herdr window instead
 ```
 
-`<base>` is the "Base directory for this skill" shown when it loads. The script resolves the
-path, hands it to the mod (Herdr's `mod.open` takes no arguments, so the path goes through
-`~/.local/share/herdr-claude/scriptorium`) and opens the window; while a scriptorium is open,
+`<base>` is the "Base directory for this skill" shown when it loads. Use `--here` only when the
+person asks for the file in their own window (beside their terminals). The script resolves the
+path, hands it to the mod (Herdr's `mod.open` takes no arguments, so the path goes through the
+window's `<home>/scriptorium-request` file) and opens the window. While a scriptorium is open,
 each further file gets a window of its own (a file that already has one keeps it). Resolve
 which file the person means first (search the working folder if they only give a name). For
 several files, run the script once per file, a second apart (each run is one request, and the
 open windows take requests once a second).
 
-Tell the person in one line which files are shown. If the script fails, report its message: not
-in Herdr, or the mod isn't installed (herdr-claude's `install.sh` installs it).
+Tell the person in one line which files are shown, and where (the script says). If the script
+fails, report its message: not in Herdr, or the mods aren't installed (herdr-claude's
+`install.sh` installs them and sets up the SCRIPTORIUM window). If the SCRIPTORIUM window isn't
+set up, the script uses the person's window and says so.
 
 ## What it can't do
 
-It stays within Herdr's own rendering (gpui's markdown view), inside the Herdr window: it can't be dragged out onto
-another display (mods get no OS window of their own). No HTML/CSS styling, and images
-or links relative to the file may not resolve. It only shows the file; editing is done
-elsewhere (Claude, or an editor), and the window follows the change. Say so if the person asks
-for more than that.
+It stays within Herdr's own rendering (gpui's markdown view). A data-slate can't leave the Herdr
+window it is in (mods get no OS window of their own); the SCRIPTORIUM window itself can go
+anywhere. A data-slate stretches by its right and bottom edges only (Herdr anchors a window at
+its top left). No HTML/CSS styling, and images or links relative to the file may not resolve. It
+only shows the file; editing is done elsewhere (Claude, or an editor), and the window follows the
+change. Say so if the person asks for more than that.
 
-Close each window with its ×, or Esc in the window that has the keyboard (the one last
-pressed, or the newest).
+Close each data-slate with its ×, or Esc in the one that has the keyboard (the one last pressed,
+or the newest). The SCRIPTORIUM window closes like any app window (⌘Q there quits only it); the
+person's terminals are not in it and keep running.
