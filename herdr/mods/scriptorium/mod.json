@@ -1,1 +1,1 @@
-{ "place": "none", "title": "Scriptorium", "overlay": { "kind": "window", "key": "scriptorium", "width": 0.8, "height": 0.8 } }
+{ "place": "none", "title": "Scriptorium", "overlay": { "kind": "window", "key": "scriptorium", "width": 0.6, "height": 0.75, "frame": "none" } }

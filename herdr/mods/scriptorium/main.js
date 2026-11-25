@@ -1,43 +1,70 @@
 // SCRIPTORIUM: floating windows, each showing one markdown file: its render, or its source
 // (read-only, with line numbers and markdown colouring), or both side by side. Opened by the
-// wh:scriptorium skill (`open-md.sh <file>`), which writes {path, id} to REQUEST and, when no
-// scriptorium is open, runs `mod.open scriptorium` (mod.open takes no props, so the path goes
-// through that file): that first window takes the request. While any is open, each new request
-// gets a window of its own, opened by whichever window sees it first (openOverlay with the
-// file as its key and prop), unless that file already has one. Each window follows its file:
-// edits show within a second. Esc closes the window that has the keyboard.
-// Read-only: it never writes the file. It lives inside the Herdr window, like every mod overlay:
-// Herdr gives mods no OS window of their own, so it can't be dragged onto another display.
+// wh:scriptorium skill (`open-md.sh <file>`), which writes {path, id} to this Herdr home's REQUEST
+// file and, when no scriptorium is open, runs `mod.open scriptorium` (mod.open takes no props, so
+// the path goes through that file). The copy mod.open makes is only a launcher: it measures the
+// default window size (its own, 60% x 75% of the Herdr window), opens the window for the request
+// and closes itself. While any window is open, each new request gets a window of its own, opened
+// by whichever window sees it first (openOverlay keyed by the file), unless that file already has
+// one. Each window follows its file: edits show within a second. Esc closes the window that has
+// the keyboard.
+// Resizing: the windows draw their own frame (frame "none") and are sized by their content, so a
+// window is as big as this mod says: grab its right edge, bottom edge or bottom-right corner and
+// drag. Herdr anchors a window at its top left, so the left and top edges don't stretch (drag the
+// window by its title instead). The size is kept per file (shared, per Herdr home).
+// Read-only: it never writes the file. It lives inside a Herdr window, like every mod overlay:
+// open-md.sh puts it in the SCRIPTORIUM window (a second Herdr window with its own home, see
+// herdr/scriptorium-window), which can go to another display; `--here` puts it in yours.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, EditorState, Editor, TextView } from "gpui-base";
-import { theme, settings, home, shared, setShared, props, openOverlay, closeOverlay, readTextFile, checking } from "herdr";
+import { theme, settings, home, appHome, shared, setShared, props, openOverlay, closeOverlay, readTextFile, checking } from "herdr";
 
 const motion = () => shared("mechanicus.motion") !== false;
-const REQUEST = () => `${home()}/.local/share/herdr-claude/scriptorium`;
+// One request file per Herdr home, so the person's window and the SCRIPTORIUM window don't take
+// each other's files (open-md.sh writes the one of the window it sends to).
+const REQUEST = () => `${appHome()}/scriptorium-request`;
 const EVERY = 1000;
 // The render is set at the terminals' font size (settings.json / the layout), so it reads like them.
 const renderSize = () => { const n = Number(settings()?.font_size); return n > 0 ? n : 13; };
 const MODES = [["source", "SOURCE"], ["split", "SPLIT"], ["render", "RENDER"]];
+// Sizes: per file, the default one (measured by the launcher), and the limits of a drag.
+const SIZES = "scriptorium.sizes", ROOM = "scriptorium.room", KEEP_SIZES = 40;
+const MIN_W = 380, MIN_H = 220, GRIP = 6, CATCH = 240;
+const sizeFor = (path) => shared(SIZES)?.[path ?? ""] ?? shared(ROOM) ?? { w: 860, h: 620 };
 
-// The latest request: { path, id }; a bare path (as earlier versions wrote) is its own id.
+// The latest request: { path, id }; a bare path is its own id.
 async function readRequest() {
   const raw = ((await readTextFile(REQUEST()).catch(() => null)) ?? "").trim();
   if (!raw) return null;
   try { const j = JSON.parse(raw); return j?.path ? { path: String(j.path), id: String(j.id ?? j.path) } : null; }
   catch { return { path: raw, id: raw }; }
 }
-// The open windows, { [overlay]: { path, at } }, each refreshed every second while it's open
+// The open windows, { [key]: { path, at } }, each refreshed every second while it's open
 // (a window that went without a goodbye drops out after a few seconds).
 const WINDOWS = "scriptorium.windows", HANDLED = "scriptorium.handled";
+const keyFor = (path) => `scriptorium:${path ?? "none"}`;
 const liveWindows = () => Object.fromEntries(Object.entries(shared(WINDOWS) ?? {})
   .filter(([, w]) => w && Date.now() - (w.at ?? 0) < 5 * EVERY));
 
+// A window of its own for a file, unless it has one already; staggered so they don't stack.
+function openWindow(path) {
+  const shown = Object.values(liveWindows());
+  if (path && shown.some((w) => w.path === path)) return;
+  const n = shown.length % 8;
+  openOverlay({ mod: "scriptorium", kind: "window", frame: "none", key: keyFor(path),
+    at: { x: 120 + 36 * n, y: 80 + 36 * n }, props: { doc: true, path } });
+}
+
 export default class Scriptorium extends View {
   init(_props, cx) {
-    // The window mod.open made has the key "scriptorium"; the others, their file.
-    this.overlay = props()?.overlay ?? (props()?.path ? `scriptorium:${props().path}` : "scriptorium");
-    this.path = props()?.path ?? null; // a window opened for one file keeps it
+    // The copy mod.open made launches the window and closes; the others show a file.
+    this.launcher = !props()?.doc;
+    if (this.launcher) return;
+    this.path = props()?.path ?? null;
+    this.key = keyFor(this.path);
+    this.size = sizeFor(this.path);
+    this.drag = null; // while resizing: { edge: "e" | "s" | "se", x, y, w, h } at the press
     this.text = null; // null: not read yet; false: unreadable
     this.mode = "render"; // it opens on the render; SOURCE / SPLIT last while it's open
     this.source = EditorState.new({ language: "markdown", readonly: true, soft_wrap: true, folding: false, value: "" });
@@ -46,25 +73,35 @@ export default class Scriptorium extends View {
     this.handle = cx.focus_handle();
     if (checking()) return;
     cx.timer.after(200, () => this.handle.focus());
-    cx.spawn(async (cx) => {
-      // The window mod.open made: it shows the request it was opened for.
-      if (!this.path) { const r = await readRequest(); if (r) { this.path = r.path; setShared(HANDLED, r.id); } }
-      this.beat();
-      this.reload(cx);
-    });
+    this.beat();
+    this.reload(cx);
     cx.timer.every(EVERY, (cx) => { this.beat(); this.reload(cx); this.takeRequest(cx); });
   }
 
   close() {
+    if (this.launcher) return;
     const w = { ...(shared(WINDOWS) ?? {}) };
-    delete w[this.overlay];
+    delete w[this.key];
     setShared(WINDOWS, w);
+  }
+
+  // The launcher: once laid out, its size is the default window size; then the request's window.
+  launch(size, cx) {
+    if (this.launched || checking()) return;
+    this.launched = true;
+    if (size?.width > 0 && size?.height > 0) setShared(ROOM, { w: Math.round(size.width), h: Math.round(size.height) });
+    cx.spawn(async () => {
+      const r = await readRequest();
+      if (r) setShared(HANDLED, r.id);
+      openWindow(r?.path ?? null);
+      closeOverlay(props().overlay);
+    });
   }
 
   // Tells the other windows which file this one shows.
   beat() {
-    if (!this.overlay || !this.path) return;
-    setShared(WINDOWS, { ...liveWindows(), [this.overlay]: { path: this.path, at: Date.now() } });
+    if (!this.path) return;
+    setShared(WINDOWS, { ...liveWindows(), [this.key]: { path: this.path, at: Date.now() } });
   }
 
   // A request no window has taken yet: a window of its own, unless its file has one already.
@@ -73,11 +110,7 @@ export default class Scriptorium extends View {
       const r = await readRequest();
       if (!r || shared(HANDLED) === r.id) return;
       setShared(HANDLED, r.id);
-      const shown = Object.values(liveWindows());
-      if (shown.some((w) => w.path === r.path)) return;
-      const n = shown.length;
-      openOverlay({ mod: "scriptorium", kind: "window", key: `scriptorium:${r.path}`, width: 0.6, height: 0.75,
-        at: { x: 120 + 36 * n, y: 80 + 36 * n }, props: { path: r.path } });
+      openWindow(r.path);
     });
   }
 
@@ -99,7 +132,36 @@ export default class Scriptorium extends View {
     cx.notify();
   }
 
+  // Resizing. A press on a grip starts it (and isn't a window drag); while it lasts, the window
+  // grows a transparent margin and a layer over everything, so the moves and the release reach
+  // this mod even when the pointer runs ahead of the edge or crosses the text.
+  grab(edge, e, cx) {
+    cx.stop_propagation();
+    this.handle.focus();
+    this.drag = { edge, x: e.position.x, y: e.position.y, w: this.size.w, h: this.size.h };
+    cx.notify();
+  }
+  stretch(e, cx) {
+    const d = this.drag;
+    if (!d) return;
+    const w = d.edge === "s" ? d.w : Math.max(MIN_W, Math.round(d.w + e.position.x - d.x));
+    const h = d.edge === "e" ? d.h : Math.max(MIN_H, Math.round(d.h + e.position.y - d.y));
+    if (w === this.size.w && h === this.size.h) return;
+    this.size = { w, h };
+    cx.notify();
+  }
+  release(cx) {
+    if (!this.drag) return;
+    this.drag = null;
+    // Kept per file (the latest few), for the next time it opens.
+    const sizes = Object.entries({ ...(shared(SIZES) ?? {}) }).filter(([k]) => k !== (this.path ?? ""));
+    setShared(SIZES, Object.fromEntries([...sizes.slice(-(KEEP_SIZES - 1)), [this.path ?? "", this.size]]));
+    cx.notify();
+  }
+
   render() {
+    if (this.launcher) return div().id("scriptorium-launcher").size_full()
+      .on_size_change((size, cx) => this.launch(size, cx));
     const t = theme();
     // Controls and text don't drag the window; pressing them still gives this window the keyboard
     // (but the source editor's own focus is left alone).
@@ -131,7 +193,9 @@ export default class Scriptorium extends View {
         .when(this.mode === "split", (el) => el.child(div().w(1).h_full().flex_none().bg(t.input)))
         .when(this.mode !== "source", (el) => el.child(rendered));
     }
-    return v_flex().id("scriptorium").size_full().bg(t.popover).border(1).border_color(t.accent)
+    const { w, h } = this.size;
+    const d = this.drag;
+    const card = v_flex().id("scriptorium").w(w).h(h).bg(t.popover).border(1).border_color(t.accent).shadow_lg()
       .track_focus(this.handle)
       .on_mouse_down("left", () => this.handle.focus())
       .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); closeOverlay(props().overlay); } })
@@ -147,5 +211,23 @@ export default class Scriptorium extends View {
           .on_mouse_down("left", stop).on_click(() => closeOverlay(props().overlay))
           .child(svg("mods/chrome-mechanicus/x.svg").size(13))))
       .child(v_flex().flex_1().min_h(0).child(body));
+    // The grips: a strip just outside the right and bottom edges (over the 1px border, clear of
+    // the render's scrollbar) and the corner, marked with a brass bracket.
+    const grip = (id, edge, el) => el.id(id).absolute().on_mouse_down("left", (e, cx) => this.grab(edge, e, cx));
+    const cursor = (el, edge) => (edge === "e" ? el.cursor_ew_resize() : edge === "s" ? el.cursor_ns_resize() : el.cursor_nwse_resize());
+    return div().id("scriptorium-frame").relative().pr(GRIP).pb(GRIP)
+      .when(d, (el) => el.pr(CATCH).pb(CATCH))
+      .child(card)
+      .child(grip("grip-e", "e", div().left(w - 2).top(0).w(GRIP + 2).h(h - 12).cursor_ew_resize()))
+      .child(grip("grip-s", "s", div().left(0).top(h - 2).w(w - 12).h(GRIP + 2).cursor_ns_resize()))
+      .child(grip("grip-se", "se", div().left(w - 12).top(h - 12).size(12 + GRIP).cursor_nwse_resize())
+        .child(div().absolute().left(1).top(1).size(9).border_r(2).border_b(2)
+          .border_color(d ? t.accent : t.dim)))
+      // While resizing: one layer over the window and its margin takes every move and the release.
+      .when(d, (el) => el.child(cursor(div().id("resize-catch").absolute().left(0).top(0).size_full(), d.edge)
+        .on_mouse_down("left", stopOnly)
+        .on_mouse_move((e, cx) => this.stretch(e, cx))
+        .on_mouse_up("left", (_e, cx) => this.release(cx))
+        .on_hover((over, cx) => { if (!over) this.release(cx); })));
   }
 }

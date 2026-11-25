@@ -1,0 +1,29 @@
+{
+  "id": "root",
+  "type": "column",
+  "theme": "mechanicus-grey",
+  "font": "JetBrains Mono",
+  "font_weight": 500,
+  "ui_font": "Share Tech Mono",
+  "titlebar": "none",
+  "traffic_lights": [12, 12],
+  "toast": "scriptorium-desk",
+  "movable": false,
+  "background": "canvas",
+  "children": [
+    {
+      "id": "band",
+      "type": "block",
+      "content": { "mod": "scriptorium-desk", "props": { "band": true } },
+      "size": { "px": 36 },
+      "window_drag": true,
+      "background": "chrome"
+    },
+    {
+      "id": "desk",
+      "type": "block",
+      "content": { "mod": "scriptorium-desk" },
+      "background": { "image": "backgrounds/mechanicus-emblem-backdrop-grey.png", "fit": "cover" }
+    }
+  ]
+}
