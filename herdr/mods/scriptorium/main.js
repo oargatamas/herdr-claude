@@ -5,7 +5,7 @@
 // through that file): that first window takes the request. While any is open, each new request
 // gets a window of its own, opened by whichever window sees it first (openOverlay with the
 // file as its key and prop), unless that file already has one. Each window follows its file:
-// edits show within a second.
+// edits show within a second. Esc closes the window that has the keyboard.
 // Read-only: it never writes the file. It lives inside the Herdr window, like every mod overlay:
 // Herdr gives mods no OS window of their own, so it can't be dragged onto another display.
 
@@ -39,7 +39,11 @@ export default class Scriptorium extends View {
     this.text = null; // null: not read yet; false: unreadable
     this.mode = "render"; // it opens on the render; SOURCE / SPLIT last while it's open
     this.source = EditorState.new({ language: "markdown", readonly: true, soft_wrap: true, folding: false, value: "" });
+    // The window with the keyboard closes on Esc: a press anywhere in it gives it the keyboard
+    // (the source keeps it for itself, and its Esc comes up to the window too), and a new one has it.
+    this.handle = cx.focus_handle();
     if (checking()) return;
+    cx.timer.after(200, () => this.handle.focus());
     cx.spawn(async (cx) => {
       // The window mod.open made: it shows the request it was opened for.
       if (!this.path) { const r = await readRequest(); if (r) { this.path = r.path; setShared(HANDLED, r.id); } }
@@ -95,7 +99,10 @@ export default class Scriptorium extends View {
 
   render() {
     const t = theme();
-    const stop = (_e, cx) => cx.stop_propagation(); // controls and text don't drag the window
+    // Controls and text don't drag the window; pressing them still gives this window the keyboard
+    // (but the source editor's own focus is left alone).
+    const stop = (_e, cx) => { cx.stop_propagation(); this.handle.focus(); };
+    const stopOnly = (_e, cx) => cx.stop_propagation();
     const name = this.path ? this.path.split("/").pop() : "no data-slate";
     const where = this.path ? this.path.replace(home(), "~") : "";
     const tabs = h_flex().gap(0).flex_none().children(MODES.map(([id, label]) => div().id(`mode-${id}`).px(6).h(20)
@@ -103,10 +110,10 @@ export default class Scriptorium extends View {
       .text_color(this.mode === id ? t.background : t.dim).when(this.mode === id, (el) => el.bg(t.accent))
       .cursor_pointer().hover((el) => (this.mode === id ? el : el.text_color(t.foreground)))
       .on_mouse_down("left", stop).on_click((_e, cx) => this.setMode(id, cx)).child(label)));
-    const pane = (label, body) => v_flex().flex_1().min_w(0).h_full().min_h(0)
+    const pane = (label, body, own = stop) => v_flex().flex_1().min_w(0).h_full().min_h(0)
       .child(div().h(22).flex_none().px(10).flex().items_center().text_size(10).text_color(t.dim)
         .border_b(1).border_color(t.input).child(label))
-      .child(v_flex().flex_1().min_h(0).on_mouse_down("left", stop).child(body));
+      .child(v_flex().flex_1().min_h(0).on_mouse_down("left", own).child(body));
     let body;
     if (!this.path) body = div().p(16).text_color(t.dim).text_size(12)
       .child("No data-slate requested. Ask Claude to open a markdown file (the wh:scriptorium skill).");
@@ -114,7 +121,7 @@ export default class Scriptorium extends View {
       .child(`The machine spirit cannot read ${where}.`);
     else if (this.text == null) body = div().p(16).text_color(t.dim).text_size(12).child("Retrieving the data-slate…");
     else {
-      const src = pane("◇ SOURCE", Editor.new(this.source).size_full());
+      const src = pane("◇ SOURCE", Editor.new(this.source).size_full(), stopOnly);
       const rendered = pane("◆ RENDER", div().id("render-scroll").size_full().px(16).py(10).overflow_y_scrollbar()
         .child(TextView.markdown("render", this.text).selectable(true)));
       body = h_flex().size_full().min_h(0)
@@ -122,7 +129,10 @@ export default class Scriptorium extends View {
         .when(this.mode === "split", (el) => el.child(div().w(1).h_full().flex_none().bg(t.input)))
         .when(this.mode !== "source", (el) => el.child(rendered));
     }
-    return v_flex().size_full().bg(t.popover).border(1).border_color(t.accent)
+    return v_flex().id("scriptorium").size_full().bg(t.popover).border(1).border_color(t.accent)
+      .track_focus(this.handle)
+      .on_mouse_down("left", () => this.handle.focus())
+      .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); closeOverlay(props().overlay); } })
       .child(h_flex().h(36).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.input)
         .text_size(12).text_color(t.accent)
         .child(svg("mods/chrome-mechanicus/gear.svg").size(13).flex_none().when(motion(), (g) => g.spin(9000)))
@@ -131,7 +141,7 @@ export default class Scriptorium extends View {
         .child(div().flex_1().min_w(0).truncate().text_size(10.5).text_color(t.dim).child(where))
         .child(tabs)
         .child(div().id("close-scriptorium").px(6).cursor_pointer().text_color(t.dim)
-          .hover((el) => el.text_color(t.foreground)).tooltip("Close the scriptorium")
+          .hover((el) => el.text_color(t.foreground)).tooltip("Close this window (Esc)")
           .on_mouse_down("left", stop).on_click(() => closeOverlay(props().overlay))
           .child(svg("mods/chrome-mechanicus/x.svg").size(13))))
       .child(v_flex().flex_1().min_h(0).child(body));
