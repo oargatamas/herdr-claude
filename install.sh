@@ -66,6 +66,14 @@ for f in statusline-account.sh herdr-profile-label.sh; do install -m 0755 "$REPO
 
 say "Skills"
 mkdir -p "$MAIN/skills"
+# Earlier names of these skills (hc-parallel-dev, then parallel and split): removed when they are
+# ours (a Herdr skill), so the old and new names don't both trigger.
+for p in "${PROFILES[@]}"; do
+  for old in hc-parallel-dev parallel split; do
+    d="$p/skills/$old"
+    if { [ -L "$d" ] && [[ "$(readlink "$d")" == "$MAIN/skills/"* ]]; } || { [ ! -L "$d" ] && grep -qs "Herdr" "$d/SKILL.md"; }; then rm -rf "$d"; ok "removed old skill $d"; fi
+  done
+done
 for sk in "$REPO"/claude/skills/*/; do
   sk=$(basename "$sk")
   rm -rf "$MAIN/skills/$sk"; cp -R "$REPO/claude/skills/$sk" "$MAIN/skills/"
