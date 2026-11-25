@@ -12,7 +12,7 @@
 // (git with --no-optional-locks).
 // Polls only while shown; gh answers are cached per branch and link.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input } from "gpui-base";
+import { v_flex, h_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { exec, hc, run, spaces, panes, terminals, focused, layout, theme, window, home, shared, props, openOverlay, closeOverlay, readTextFile, writeTextFile, checking } from "herdr";
 
 // Sidebar animations on unless stilled with a click on the brand emblem.
@@ -104,11 +104,28 @@ const FABRICATOR = "litany-fabricator";
 const repoFile = () => `${home()}/.local/share/herdr-claude/repo`;
 // DATA-LITANY todos: a markdown checklist anyone can also edit by hand.
 const notesFile = () => `${home()}/.local/share/herdr-claude/todos.md`;
-const NOTES_HEAD = "# Herdr + Claude improvement notes\n\nTodos added from AUSPEX (DATA-LITANY). Edit freely: lines like `- [ ] text` are the todos.\n\n";
-// [{ line, done, text }] for every `- [ ] …` / `- [x] …` line; other lines are kept as they are.
-const parseTodos = (text) => (text ?? "").split("\n")
-  .map((l, line) => { const m = l.match(/^\s*[-*] \[([ xX])\] (.*)$/); return m ? { line, done: m[1] !== " ", text: m[2] } : null; })
-  .filter(Boolean);
+const NOTES_HEAD = "# Herdr + Claude improvement notes\n\nTodos added from AUSPEX (DATA-LITANY). Edit freely: lines like `- [ ] text` are the todos; lines indented by two spaces below one continue it.\n\n";
+// A todo is a `- [ ] …` / `- [x] …` line; a multi-line one continues on the lines below it that
+// are indented by two or more spaces (Markdown's list continuation). Other lines are kept as they are.
+const TODO_LINE = /^\s*[-*] \[([ xX])\] (.*)$/;
+const isMore = (l) => l !== undefined && /^ {2,}\S/.test(l) && !TODO_LINE.test(l);
+// [{ line, span, done, text, more }]: text is the first line, more the continuation lines.
+const parseTodos = (text) => {
+  const lines = (text ?? "").split("\n"), out = [];
+  lines.forEach((l, line) => {
+    const m = l.match(TODO_LINE);
+    if (!m) return;
+    const more = [];
+    while (isMore(lines[line + 1 + more.length])) more.push(lines[line + 1 + more.length].trim());
+    out.push({ line, span: 1 + more.length, done: m[1] !== " ", text: m[2], more });
+  });
+  return out;
+};
+// What was typed, as todo lines: blanks dropped, the first line the todo, the rest indented under it.
+const todoLines = (typed) => {
+  const lines = typed.split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  return lines.length ? `- [ ] ${lines[0]}\n` + lines.slice(1).map((l) => `  ${l}\n`).join("") : "";
+};
 
 // The branch a checkout is on; for a detached commit, a branch pointing at it, else the
 // nearest branch containing it (git name-rev, e.g. "origin/main~3": 3 commits below its tip).
@@ -462,19 +479,18 @@ export default class Auspex extends View {
   // ── DATA-LITANY: todo notes in notesFile(), shared by the sidebar and the dialog.
   initNotes(cx) {
     this.notesText = null;
-    this.todoInput = InputState.new({ placeholder: "New todo for the mods or Claude… (Enter adds)" });
+    // The sidebar has a one-line field (Enter adds); the dialog a multi-line box (cmd-enter adds,
+    // Enter starts a new line of the same todo).
+    this.todoInput = this.notesDialog
+      ? TextareaState.new({ placeholder: "New todo for the mods or Claude… (⌘↵ adds; Enter starts a new line)" })
+      : InputState.new({ placeholder: "New todo for the mods or Claude… (Enter adds)" });
+    if (this.notesDialog) this.todoInput.set_soft_wrap(true);
     // The todo being typed is kept (per sidebar / dialog) so a mod reload, e.g. an install while
     // fabricating, doesn't lose it; it is cleared once added.
-    const draftKey = `todo-draft:${this.notesDialog ? "dialog" : "sidebar"}`;
-    try { const d = localStorage.getItem(draftKey); if (d) this.todoInput.set_value(d); } catch {}
-    this.todoInput.on("change", () => { try { localStorage.setItem(draftKey, this.todoInput.value()); } catch {} });
-    this.todoInput.on("submit", (_e, cx) => {
-      const text = this.todoInput.value().replace(/\s+/g, " ").trim();
-      if (!text) return;
-      this.todoInput.set_value("");
-      try { localStorage.removeItem(draftKey); } catch {}
-      this.editNotes(cx, (cur) => cur.replace(/\n*$/, "\n") + `- [ ] ${text}\n`);
-    });
+    this.draftKey = `todo-draft:${this.notesDialog ? "dialog" : "sidebar"}`;
+    try { const d = localStorage.getItem(this.draftKey); if (d) this.todoInput.set_value(d); } catch {}
+    this.todoInput.on("change", () => { try { localStorage.setItem(this.draftKey, this.todoInput.value()); } catch {} });
+    if (!this.notesDialog) this.todoInput.on("submit", (_e, cx) => this.addTodo(cx));
     this.fab = null;
     if (checking()) return;
     this.loadNotes(cx);
@@ -552,6 +568,15 @@ export default class Auspex extends View {
     });
   }
 
+  // Add what is typed as a todo (its continuation lines too) and clear the field and its draft.
+  addTodo(cx) {
+    const add = todoLines(this.todoInput.value());
+    if (!add) return;
+    this.todoInput.set_value("");
+    try { localStorage.removeItem(this.draftKey); } catch {}
+    this.editNotes(cx, (cur) => cur.replace(/\n*$/, "\n") + add);
+  }
+
   // Toggle or delete one todo; finds it by line, else by its text (if the file moved lines).
   changeTodo(cx, item, remove) {
     this.editNotes(cx, (cur) => {
@@ -559,7 +584,7 @@ export default class Auspex extends View {
       const same = (l) => { const m = l.match(/^\s*[-*] \[([ xX])\] (.*)$/); return m && m[2] === item.text; };
       const i = same(lines[item.line] ?? "") ? item.line : lines.findIndex(same);
       if (i < 0) return cur;
-      if (remove) lines.splice(i, 1);
+      if (remove) { let n = 1; while (isMore(lines[i + n])) n++; lines.splice(i, n); } // with its continuation lines
       else lines[i] = lines[i].replace(/\[([ xX])\]/, (_m, c) => (c === " " ? "[x]" : "[ ]"));
       return lines.join("\n");
     });
@@ -571,6 +596,17 @@ export default class Auspex extends View {
 
   // The add-a-todo field, as used in the sidebar and the dialog.
   todoField(t, id) {
+    if (this.notesDialog)
+      return v_flex().id(id).gap(4)
+        .child(div().h(96).p(6).border(1).border_color(t.input).bg(t.background).cursor_text().text_size(12).text_color(t.foreground)
+          .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.todoInput.focus(); })
+          .on_key_down((e, cx) => { if (e.keystroke === "cmd-enter" || e.keystroke === "ctrl-enter") { cx.stop_propagation(); this.addTodo(cx); } })
+          .child(Textarea.new(this.todoInput).size_full()))
+        .child(h_flex().gap(8).items_center()
+          .child(div().flex_1().text_size(10.5).text_color(t.dim).child("⌘↵ adds · Enter: a new line of the same todo"))
+          .child(div().id(`${id}-add`).flex_none().px(6).border(1).border_color(t.accent).text_color(t.accent).text_size(10.5)
+            .cursor_pointer().hover((el) => el.bg(t.accent).text_color(t.background))
+            .on_click((_e, cx) => { cx.stop_propagation(); this.addTodo(cx); }).child("INSCRIBE")));
     return div().id(id).h(28).px(8).flex().items_center().border(1).border_color(t.input).bg(t.background).cursor_text()
       .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.todoInput.focus(); })
       .child(Input.new(this.todoInput).w_full().text_size(12).text_color(t.foreground));
@@ -584,8 +620,9 @@ export default class Auspex extends View {
         .on_click((_e, cx) => { cx.stop_propagation(); this.changeTodo(cx, item, false); })
         .child(item.done ? "☑" : "☐"))
       .child(full
-        ? div().flex_1().min_w(0).whitespace_normal().text_color(item.done ? t.dim : t.foreground).child(item.text)
-        : div().flex_1().min_w(0).truncate().text_color(t.foreground).child(item.text))
+        ? v_flex().flex_1().min_w(0).text_color(item.done ? t.dim : t.foreground)
+          .children([item.text, ...item.more].map((l) => div().whitespace_normal().child(l)))
+        : div().flex_1().min_w(0).truncate().text_color(t.foreground).child(item.more.length ? `${item.text} …` : item.text))
       .when(full, (el) => el.child(div().id(`todo-del-${item.line}`).flex_none().px(4).cursor_pointer().text_color(t.dim)
         .hover((s) => s.text_color(t.blocked)).tooltip("Delete")
         .on_click((_e, cx) => { cx.stop_propagation(); this.changeTodo(cx, item, true); })

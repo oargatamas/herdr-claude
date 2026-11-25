@@ -14,7 +14,7 @@ person asks to publish (the `wh:petition` skill opens the PR); don't push or ope
 
 | What | Where |
 |---|---|
-| The notes | `~/.local/share/herdr-claude/todos.md`: `- [ ] text` is open, `- [x] text` is done. AUSPEX re-reads it every few seconds, so edits show up there. |
+| The notes | `~/.local/share/herdr-claude/todos.md`: `- [ ] text` is open, `- [x] text` is done. A note can go on over the lines indented by two spaces right below it (the DATA-LITANY dialog writes multi-line notes that way): those lines are part of the note. AUSPEX re-reads it every few seconds, so edits show up there. |
 | The clone | `REPO=$(cat ~/.local/share/herdr-claude/repo 2>/dev/null \|\| echo ~/projects/herdr-claude)` (written by `install.sh`) |
 | The work | a git worktree at `WT=~/.local/share/herdr-claude/litany`, on the branch named in `~/.local/share/herdr-claude/litany-branch` |
 | Notes you were told to skip | `~/.local/share/herdr-claude/litany-skipped`, one note text per line |
@@ -53,7 +53,7 @@ woken when a note appears and the session stays free meanwhile:
 <base>/litany-watch.sh
 ```
 
-It prints `<line>\t<note>` for the first open note that isn't skipped and exits. Tell the
+It prints `<line>\t<first line of the note>` for the first open note that isn't skipped and exits. Tell the
 person in one line that you're watching the DATA-LITANY on `<branch>`. Then stop and wait for
 the notification: don't poll, and don't start a second watcher while one is running.
 
@@ -80,7 +80,7 @@ When the watcher reports a note:
 
    <a few lines: what and why>
 
-   DATA-LITANY: <the note's text, as written>
+   DATA-LITANY: <the note's text, as written: every line of it>
 
    <the session's commit attribution lines, if any>
    MSG
@@ -88,7 +88,8 @@ When the watcher reports a note:
    One commit per note: no unrelated changes in it, and no note spread over several commits
    (amend if you need to fix your own commit for the same note before moving on).
 5. Mark the note done in `todos.md`, keeping the person's text and adding the commit:
-   `- [x] <text> — fabricated in <short sha>`. Edit only that line; the file may have changed
+   `- [x] <text> — fabricated in <short sha>`, on the note's first line; leave its continuation
+   lines as they are. Edit only that line; the file may have changed
    since you read it, so read it again right before the edit.
 6. To let the person try it straight away, install from the worktree:
    `$WT/install.sh --no-personal` (it still records the main clone as the repo). Report its `!`
