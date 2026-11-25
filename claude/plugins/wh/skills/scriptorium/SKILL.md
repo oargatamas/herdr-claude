@@ -6,7 +6,8 @@ description: Open a markdown file in the SCRIPTORIUM, a floating Herdr window sh
 # Scriptorium
 
 The `scriptorium` Herdr mod is a floating window (drag it anywhere; it reopens where it was
-dropped) that shows one markdown file: its source on the left, the render on the right. It
+dropped) that shows one markdown file: it opens on the render; SOURCE and SPLIT (source beside
+render) are a click away. It
 re-reads the file every second, so edits show while it is open.
 
 ## Open a file
@@ -26,7 +27,8 @@ in Herdr, or the mod isn't installed (herdr-claude's `install.sh` installs it).
 
 ## What it can't do
 
-It stays within Herdr's own rendering (gpui's markdown view): no HTML/CSS styling, and images
+It stays within Herdr's own rendering (gpui's markdown view), inside the Herdr window: it can't be dragged out onto
+another display (mods get no OS window of their own). No HTML/CSS styling, and images
 or links relative to the file may not resolve. It only shows the file; editing is done
 elsewhere (Claude, or an editor), and the window follows the change. Say so if the person asks
 for more than that.

@@ -3,7 +3,8 @@
 // (`open-md.sh <file>`), which writes the file's path to REQUEST and runs `mod.open scriptorium`
 // (mod.open takes no props, so the path goes through that file). While open it follows REQUEST
 // (another file replaces the shown one) and the file itself (edits show within a second).
-// Read-only: it never writes the file.
+// Read-only: it never writes the file. It lives inside the Herdr window, like every mod overlay:
+// Herdr gives mods no OS window of their own, so it can't be dragged onto another display.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, EditorState, Editor, TextView } from "gpui-base";
@@ -18,7 +19,7 @@ export default class Scriptorium extends View {
   init(_props, cx) {
     this.path = null;
     this.text = null; // null: not read yet; false: unreadable
-    try { this.mode = localStorage.getItem("mode") || "split"; } catch { this.mode = "split"; }
+    this.mode = "render"; // it opens on the render; SOURCE / SPLIT last while it's open
     this.source = EditorState.new({ language: "markdown", readonly: true, soft_wrap: true, folding: false, value: "" });
     if (checking()) return;
     this.reload(cx);
@@ -41,7 +42,6 @@ export default class Scriptorium extends View {
 
   setMode(mode, cx) {
     this.mode = mode;
-    try { localStorage.setItem("mode", mode); } catch {}
     cx.notify();
   }
 
