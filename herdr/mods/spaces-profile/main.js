@@ -1,4 +1,4 @@
-// Workspace spaces: stable colored avatars, worktrees under their checkout,
+// Workspace spaces: stable colored servo-skull avatars, worktrees under their checkout,
 // grouped by machine when more than one is known. After a space's name, the repo
 // its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
 // switch, right-click for its menu, drag to reorder.
@@ -56,6 +56,11 @@ async function both(a, b) {
 // What a stored color name looks like on an avatar (the same in every mod
 // that draws space avatars): one strong color per hue, light and dark alike.
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
+// Each space's avatar is a servo-skull (skulls/skull-01.svg … skull-10.svg), kept in
+// shared("space.skulls") by space id: drawn at random from those no open space bears.
+// "~", which keeps the default color, keeps the first skull too.
+const SKULLS = Array.from({ length: 10 }, (_, i) => `skull-${String(i + 1).padStart(2, "0")}`);
+const HOME_SKULL = SKULLS[0];
 
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
@@ -451,6 +456,7 @@ export default class Spaces extends View {
     const colors = shared("space.colors") ?? {};
     const color = colors[w.id] ?? "ansi6";
     const fill = color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    const skull = (shared("space.skulls") ?? {})[w.id] ?? HOME_SKULL;
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -498,7 +504,7 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
+          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().child(svg(`mods/spaces-profile/skulls/${skull}.svg`).size(14).text_color("#ffffff"))))
           .child(div().flex_initial().min_w(SIDE_MIN).truncate().when(on, (el) => el.font_bold()).text_color(on ? t.accent : t.muted).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
           .children(profilesIn("space", w.id).map((p) => badge(t, p, 9))),
@@ -546,6 +552,20 @@ export default class Spaces extends View {
       changed = true;
     }
     if (changed) setShared("space.colors", kept);
+    // Skulls likewise, but at random among those no open space bears yet (any, once all ten are borne).
+    const stored = shared("space.skulls") ?? {};
+    const bones = Object.fromEntries(Object.entries(stored).filter(([id, k]) => ids.has(id) && SKULLS.includes(k)));
+    let rattled = Object.keys(bones).length !== Object.keys(stored).length;
+    for (const p of sp) {
+      if (bones[p.id] || p.name === "~") continue;
+      const borne = new Set(Object.values(bones));
+      if (sp.some(q => q.name === "~")) borne.add(HOME_SKULL);
+      const free = SKULLS.filter(k => !borne.has(k));
+      const pool = free.length ? free : SKULLS;
+      bones[p.id] = pool[Math.floor(Math.random() * pool.length)];
+      rattled = true;
+    }
+    if (rattled) setShared("space.skulls", bones);
     const list = this.grouped(t, collapsed);
     // Bring the active space into view when it, or its place in the list, changes; a row already in view stays put.
     const active = sp.find(p => p.active)?.id;

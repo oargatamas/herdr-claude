@@ -158,6 +158,7 @@ sidebar.
 | `herdr/mods/claude-fork*/` | Fork into a tab, or a split per direction (a shortcut can't pass arguments to a mod) |
 | `herdr/shared/fork.js` | Copied into every `claude-fork*` mod (mods can't import across folders) |
 | `herdr/mods/spaces-profile/`, `tabs-profile/` | Copies of Herdr's sidebar list and tab bar, with badges |
+| `herdr/mods/spaces-profile/skulls/` | Ten one-color servo-skulls (ocular, antenna, vox-grille, cog crest, cables, mechadendrite, iron jaw, wings, thrusters, visor), the space avatars on their colored squares: each space draws one at random from those no open space bears yet (any once all ten are taken), kept by space id in `space.skulls`; `~` keeps the first |
 | `herdr/shared/profile.js` | The badge code, copied into both |
 | `herdr/mods/help-plus/` | Copy of Herdr's keybinds dialog with the Claude section, plus a Skills tab (`Tab` switches) listing the repo's Claude skills with their descriptions and whether each is installed |
 | `herdr/layouts/mechanicus-grey.json`, `mechanicus-green.json` (+ `.svg` previews) | Copies of Herdr's `main` layout using the mods here, with the Mechanicus look (theme, fonts, square frames, terminal emblem); identical except theme, background and emblem |
