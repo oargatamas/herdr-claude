@@ -11,7 +11,9 @@ Never merge it: the person reviews and merges.
 ## 1. Stop watching
 
 Stop the `augment-watch.sh` background task if one is running in this session (TaskStop), else
-`pkill -f 'augment-watch\.sh|litany-watch\.sh' || true`. If you were in the middle of a note, finish and
+`pkill -f 'augment-watch\.sh|litany-watch\.sh' || true`. Servo-skulls still at work (lines in
+`~/.local/share/herdr-claude/augment-skulls`): let them finish and fold their commits in first, or
+ask the person whether to leave those notes out. If you were in the middle of a note, finish and
 commit it first, or ask whether to leave it out.
 
 ## 2. Check what there is
@@ -69,7 +71,7 @@ person's: never merge, not even with `oargatamas`.
 
 ```bash
 git -C "$REPO" worktree remove "$WT"
-rm -f $D/augment-branch $D/augment-skipped $D/litany-branch $D/litany-skipped
+rm -f $D/augment-branch $D/augment-skipped $D/augment-claimed $D/augment-skulls $D/litany-branch $D/litany-skipped
 ```
 
 The branch stays (local and on GitHub) for the PR. The done notes stay in `todos.md` with their
