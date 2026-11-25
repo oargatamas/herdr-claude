@@ -4,7 +4,8 @@
 //   PULL-PETITIONS & CI: (a failing PR gets a DIAGNOSE button: Claude in a split, asked why) the PR of every session in the shown tab and PR links found in
 //     those terminals' text, with checks and review state (via gh)
 //   DATA-LITANY: todos for improving the Herdr mods and Claude, in a markdown file
-//     (~/.local/share/herdr-claude/todos.md); the expand icon shows them all in a dialog
+//     (~/.local/share/herdr-claude/todos.md); the expand icon shows them all in a dialog;
+//     the FABRICATE toggle starts or stops a hidden Claude running the fabricate skill
 //   Jira keys (ABC-123) in branches and PR titles get a link to the Jira site seen in sessions
 // AUSPEX: read-only engineering readings for the focused terminal's repository, in the
 // Mechanicus look. It never changes anything: git and gh are only asked questions
@@ -97,6 +98,10 @@ const RITES = {
 const riteFrames = (kind) => RITES[kind].flatMap((l) => [`${l}.`, `${l}..`, `${l}...`, `${l}...`]);
 const PULSE = ["▰▱▱▱▱", "▰▰▱▱▱", "▰▰▰▱▱", "▱▰▰▰▱", "▱▱▰▰▰", "▱▱▱▰▰", "▱▱▱▱▰", "▱▱▱▱▱"];
 
+// The FABRICATE toggle: a Claude session without a pane (hc terminal FABRICATOR) running the
+// fabricate skill in the herdr-claude clone, on the personal profile (the repo is personal).
+const FABRICATOR = "litany-fabricator";
+const repoFile = () => `${home()}/.local/share/herdr-claude/repo`;
 // DATA-LITANY todos: a markdown checklist anyone can also edit by hand.
 const notesFile = () => `${home()}/.local/share/herdr-claude/todos.md`;
 const NOTES_HEAD = "# Herdr + Claude improvement notes\n\nTodos added from AUSPEX (DATA-LITANY). Edit freely: lines like `- [ ] text` are the todos.\n\n";
@@ -193,7 +198,7 @@ export default class Auspex extends View {
       if (key !== this.cwdKey || Date.now() - (this.gitAt ?? 0) > GIT_EVERY) this.refresh(cx);
       const tk = this.tabKey();
       if (tk !== this.tabKeyNow || Date.now() - (this.tabAt ?? 0) > MENTION_EVERY) this.loadTab(cx);
-      if (Date.now() - (this.notesAt ?? 0) > NOTES_EVERY) this.loadNotes(cx);
+      if (Date.now() - (this.notesAt ?? 0) > NOTES_EVERY) { this.loadNotes(cx); this.loadFabricator(cx); }
     });
     this.refresh(cx);
     this.loadTab(cx);
@@ -464,13 +469,58 @@ export default class Auspex extends View {
       this.todoInput.set_value("");
       this.editNotes(cx, (cur) => cur.replace(/\n*$/, "\n") + `- [ ] ${text}\n`);
     });
+    this.fab = null;
     if (checking()) return;
     this.loadNotes(cx);
+    this.loadFabricator(cx);
     if (this.notesDialog) {
       this.todoInput.focus();
       cx.timer.after(300, () => this.todoInput.focus());
       cx.timer.every(NOTES_EVERY, (cx) => this.loadNotes(cx));
     }
+  }
+
+  // The fabricator's state: null (none), { address, status } of its live terminal, or
+  // { elsewhere: true } when another session runs the fabricate watcher (one fabricator at a time).
+  loadFabricator(cx) {
+    if (this.fabBusy) return;
+    cx.spawn(async (cx) => {
+      const r = await hc(["get", FABRICATOR, "--json"]).catch(() => null);
+      let fab = null;
+      if (r?.code === 0) { try { const j = JSON.parse(r.stdout); if (j.state === "live") fab = { address: j.address, status: j.status?.state ?? "" }; } catch {} }
+      if (!fab) {
+        const w = await exec("pgrep", ["-f", "fabricate/litany-watch.sh"]).catch(() => null);
+        if (w?.code === 0) fab = { elsewhere: true };
+      }
+      if (JSON.stringify(fab) !== JSON.stringify(this.fab)) { this.fab = fab; cx.notify(); }
+    });
+  }
+
+  // Start the fabricator when none runs, else end it. Its commits stay on the litany branch.
+  toggleFabricator(cx) {
+    if (this.fabBusy) return;
+    this.fabBusy = true;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      if (this.fab?.elsewhere) { /* another session fabricates: stop it there */ }
+      else if (this.fab) {
+        await hc(["kill", FABRICATOR]).catch(() => null);
+        await hc(["rm", FABRICATOR]).catch(() => null);
+      } else {
+        const repo = ((await readTextFile(repoFile()).catch(() => null)) ?? `${home()}/projects/herdr-claude`).trim();
+        await hc(["rm", FABRICATOR]).catch(() => null); // an exited one keeps the name
+        await hc(["run", "--bg", "--json", "--name", FABRICATOR, "--no-parent", "--outlive-parent",
+          "--label", "herdr.fabricate=1", "--cwd", repo,
+          `${home()}/.local/bin/claude-ws`, "--profile", "personal", "--", "/fabricate"]).catch(() => null);
+      }
+      this.fabBusy = false;
+      this.loadFabricator(cx);
+    });
+  }
+
+  // Show the hidden fabricator in a tab (to answer a question it asks, or watch it work).
+  showFabricator() {
+    if (this.fab?.address) run("terminal.keep", { terminal: this.fab.address, place: "tab" });
   }
 
   loadNotes(cx) {
@@ -712,7 +762,26 @@ export default class Auspex extends View {
     // ── DATA-LITANY: todos for improving the mods and Claude
     {
       const todos = parseTodos(this.notesText), open = todos.filter((x) => !x.done);
+      // FABRICATE: blue when no fabricator runs, green while one watches the notes, amber when it
+      // waits for the person (then the eye shows its terminal).
+      const fab = this.fab, waiting = fab?.status === "blocked", elsewhere = Boolean(fab?.elsewhere);
+      const fabColor = this.fabBusy ? t.dim : !fab ? (t.ansi4 ?? t.accent) : waiting ? t.working : (t.ansi2 ?? t.done);
+      const fabBtn = div().id("fabricate-toggle").flex_none().px(4).border(1).border_color(fabColor).text_color(fabColor)
+        .text_size(10).cursor_pointer().hover((el) => el.bg(fabColor).text_color(t.background))
+        .when(Boolean(fab) && !waiting && motion(), (el) => el.loop("opacity", { from: 0.55, to: 1, period: 1600 }))
+        .tooltip(this.fabBusy ? "…" : !fab ? "Start a hidden Claude that implements these notes, one commit each (fabricate)"
+          : elsewhere ? "Another Claude session is fabricating these notes: stop it there"
+          : waiting ? "The fabricator waits for you: the eye shows it. Click to stop it"
+          : "The fabricator watches these notes. Click to stop it (its commits stay on the litany branch)")
+        .on_click((_e, cx) => { cx.stop_propagation(); this.toggleFabricator(cx); })
+        .child(this.fabBusy ? "⚙ …" : fab ? (waiting ? "⚙ AWAITS YOU" : "⚙ FABRICATING") : "⚙ FABRICATE");
+      const fabEye = div().id("fabricate-show").flex_none().px(2).cursor_pointer().text_size(11).text_color(waiting ? t.working : t.dim)
+        .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Show the fabricator's terminal in a tab")
+        .on_click((_e, cx) => { cx.stop_propagation(); this.showFabricator(); })
+        .child("◉");
       body.child(heading("✎", "DATA-LITANY", `${open.length} open`)
+        .child(fabBtn)
+        .when(Boolean(fab) && !elsewhere, (el) => el.child(fabEye))
         .child(div().id("notes-expand").flex_none().p(1).cursor_pointer().text_color(t.dim)
           .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Show all notes")
           .on_click((_e, cx) => { cx.stop_propagation(); this.openNotes(); })
