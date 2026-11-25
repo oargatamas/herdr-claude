@@ -24,7 +24,7 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
 ### Notes for Claude when installing
 
 - Read `install.sh` before running it. It only writes: `~/.local/bin/{claude-ws,hc-worker}`,
-  `~/.claude/{statusline-account.sh,herdr-profile-label.sh}`, the `conclave`, `servo-skull` and `reconsecrate` skills, a
+  `~/.claude/{statusline-account.sh,herdr-profile-label.sh}`, the `conclave`, `servo-skull`, `reconsecrate`, `fabricate` and `petition` skills, a
   marked block in each profile's `CLAUDE.md`, merged entries in each profile's `settings.json`,
   and its own mods, layout and keys under `~/.config/herdr-app`. Backups:
   `*.bak-herdr-claude-<time>` next to every settings file it changes.
@@ -60,6 +60,9 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
   orchestrator (or tabs) in git worktrees, each on a model and effort the orchestrator picks from
   the task's complexity (`haiku`/`sonnet`/`opus`, `hc-worker start --model … --effort …`) (`hc-worker start`), coordination with `hc send` / `hc wait`, review, merge, cleanup
   (`hc-worker stop`, `hc-worker prune`).
+- **`fabricate` and `petition` skills**: "fabricate" → Claude watches AUSPEX's DATA-LITANY notes and
+  implements each open one as its own commit on a litany branch (marking it done with the commit);
+  "petition" → that branch goes up as one PR.
 - **`servo-skull` skill**: "open a Claude in a split" → one independent Claude beside you,
   fresh or a fork of this conversation, on the model and effort that fit; yours to work with.
 - **`reconsecrate` skill**: "update herdr-claude" → local changes in the clone set aside
@@ -143,6 +146,8 @@ sidebar.
 | `claude/skills/conclave/` | Parallel workers skill (linked into every profile) |
 | `claude/skills/servo-skull/` | Opens one Claude beside you in a split, fresh or a fork (`split.sh`; linked into every profile) |
 | `claude/skills/reconsecrate/` | Update skill: resets this clone to `origin/main` (local work kept in a stash / backup branch) and runs `install.sh` (linked into every profile) |
+| `claude/skills/fabricate/` | Watches the DATA-LITANY notes (`litany-watch.sh`) and implements each one as its own commit on a `litany/<time>` branch, in a worktree at `~/.local/share/herdr-claude/litany` (linked into every profile) |
+| `claude/skills/petition/` | Publishes the litany branch: push, PR to `main` with one line per note, then clears the litany state (linked into every profile) |
 | `herdr/mods/claude-space/` | The `cmd-shift-n` form |
 | `herdr/mods/claude-fork*/` | Fork into a tab, or a split per direction (a shortcut can't pass arguments to a mod) |
 | `herdr/shared/fork.js` | Copied into every `claude-fork*` mod (mods can't import across folders) |
