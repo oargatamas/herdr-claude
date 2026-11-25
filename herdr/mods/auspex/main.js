@@ -812,7 +812,7 @@ export default class Auspex extends View {
     {
       const todos = parseTodos(this.notesText), open = todos.filter((x) => !x.done);
       // AUGMENT: blue when no augmentor runs, green while one watches the notes, amber when it
-      // waits for the person (then the eye shows its terminal).
+      // waits for the person: then the button opens its terminal, and a ■ beside it stops it.
       const fab = this.fab, waiting = fab?.status === "blocked", elsewhere = Boolean(fab?.elsewhere);
       const fabColor = this.fabBusy ? t.dim : !fab ? (t.ansi4 ?? t.accent) : waiting ? t.working : (t.ansi2 ?? t.done);
       const fabBtn = div().id("augment-toggle").flex_none().px(4).border(1).border_color(fabColor).text_color(fabColor)
@@ -820,17 +820,21 @@ export default class Auspex extends View {
         .when(Boolean(fab) && !waiting && motion(), (el) => el.loop("opacity", { from: 0.55, to: 1, period: 1600 }))
         .tooltip(this.fabBusy ? "…" : !fab ? "Start a hidden Claude that implements these notes, one commit each (augment)"
           : elsewhere ? "Another Claude session is augmenting from these notes: stop it there"
-          : waiting ? "The augmentor waits for you: the eye shows it. Click to stop it"
+          : waiting ? "The augmentor waits for you: click to open its terminal (■ stops it)"
           : "The augmentor watches these notes. Click to stop it (its commits stay on the augment branch)")
-        .on_click((_e, cx) => { cx.stop_propagation(); this.toggleAugmentor(cx); })
+        .on_click((_e, cx) => { cx.stop_propagation(); if (waiting && !elsewhere && !this.fabBusy) this.showAugmentor(); else this.toggleAugmentor(cx); })
         .child(this.fabBusy ? "⚙ …" : fab ? (waiting ? "⚙ AWAITS YOU" : "⚙ AUGMENTING") : "⚙ AUGMENT");
       const fabEye = div().id("augment-show").flex_none().px(2).cursor_pointer().text_size(11).text_color(waiting ? t.working : t.dim)
         .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Show the augmentor's terminal in a tab")
         .on_click((_e, cx) => { cx.stop_propagation(); this.showAugmentor(); })
         .child("◉");
+      const fabStop = div().id("augment-stop").flex_none().px(2).cursor_pointer().text_size(10).text_color(t.dim)
+        .hover((el) => el.text_color(t.blocked).bg(t.hover)).tooltip("Stop the augmentor (its commits stay on the augment branch)")
+        .on_click((_e, cx) => { cx.stop_propagation(); this.toggleAugmentor(cx); })
+        .child("■");
       body.child(heading("✎", "AUGMENTATIONS", `${open.length} open`)
         .child(fabBtn)
-        .when(Boolean(fab) && !elsewhere, (el) => el.child(fabEye))
+        .when(Boolean(fab) && !elsewhere, (el) => el.child(waiting ? fabStop : fabEye))
         .child(div().id("notes-expand").flex_none().p(1).cursor_pointer().text_color(t.dim)
           .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Show all notes")
           .on_click((_e, cx) => { cx.stop_propagation(); this.openNotes(); })
