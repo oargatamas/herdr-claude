@@ -1,7 +1,7 @@
 {
   "name": "wh",
   "version": "1.0.0",
-  "description": "The Mechanicus skills for Herdr + Claude: conclave (parallel workers), servo-skull (one Claude beside you), reconsecrate (update from the repo), fabricate (DATA-LITANY notes become commits) and petition (open the PR).",
+  "description": "The Mechanicus skills for Herdr + Claude: conclave (parallel workers), servo-skull (one Claude beside you), reconsecrate (update from the repo), augment (the AUGMENTATIONS self-improvement notes become commits) and petition (open the PR).",
   "author": { "name": "oargatamas" },
   "repository": "https://github.com/oargatamas/herdr-claude",
   "keywords": ["herdr", "hc", "warhammer", "mechanicus"]

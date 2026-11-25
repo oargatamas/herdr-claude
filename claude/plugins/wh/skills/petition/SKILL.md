@@ -1,31 +1,33 @@
 ---
 name: petition
-description: Publish the DATA-LITANY work collected by the wh:fabricate skill: stop watching the notes, push the litany branch of herdr-claude and open a pull request to main with one line per implemented note, then clear the litany state so the next fabricate starts a fresh branch. Use when the user says "petition" or "petition the Omnissiah", or asks to publish, push or open the PR for the fabricated / DATA-LITANY / AUSPEX notes.
+description: Publish the AUGMENTATIONS work collected by the wh:augment skill: stop watching the notes, push the augment branch of herdr-claude and open a pull request to main with one line per implemented note, then clear the augment state so the next augment starts a fresh branch. Use when the user says "petition" or "petition the Omnissiah", or asks to publish, push or open the PR for the augmented / fabricated / AUGMENTATIONS / DATA-LITANY / AUSPEX notes.
 ---
 
-# Petition of the Litany
+# Petition of the Augmentations
 
-Turns the branch that `wh:fabricate` filled (one commit per DATA-LITANY note) into a pull request.
+Turns the branch that `wh:augment` filled (one commit per AUGMENTATIONS note) into a pull request.
 Never merge it: the person reviews and merges.
 
 ## 1. Stop watching
 
-Stop the `litany-watch.sh` background task if one is running in this session (TaskStop), else
-`pkill -f fabricate/litany-watch.sh || true`. If you were in the middle of a note, finish and
+Stop the `augment-watch.sh` background task if one is running in this session (TaskStop), else
+`pkill -f 'augment-watch\.sh|litany-watch\.sh' || true`. If you were in the middle of a note, finish and
 commit it first, or ask whether to leave it out.
 
 ## 2. Check what there is
 
 ```bash
-D=~/.local/share/herdr-claude; WT=$D/litany
+D=~/.local/share/herdr-claude; WT=$D/augment
 REPO=$(cat $D/repo 2>/dev/null || echo ~/projects/herdr-claude)
-BRANCH=$(cat $D/litany-branch)
+# State from before the rename (wh:fabricate's litany): use it where it is.
+[ -f $D/augment-branch ] || { [ -f $D/litany-branch ] && WT=$D/litany && cp $D/litany-branch $D/augment-branch; }
+BRANCH=$(cat $D/augment-branch)
 git -C "$WT" status --short                  # must be empty: every note committed
 git -C "$REPO" fetch --prune origin
 git -C "$WT" log --reverse --format='%h %s' origin/main..HEAD
 ```
 
-No litany branch, or no commits on it: say there's nothing to publish and stop. Uncommitted
+No augment branch, or no commits on it: say there's nothing to publish and stop. Uncommitted
 changes: show them and ask whether to commit them as their own note or drop them.
 
 ## 3. Bring it up to date
@@ -49,7 +51,7 @@ gh auth status 2>&1 | grep -q "account $ACCOUNT" \
 [ "$PREV" = "$ACCOUNT" ] || gh auth switch --user "$ACCOUNT"
 trap '[ "$PREV" = "$ACCOUNT" ] || gh auth switch --user "$PREV"' EXIT
 git -C "$WT" push -u origin "$BRANCH"
-cd "$WT" && gh pr create --base main --head "$BRANCH" --title "DATA-LITANY: <n> notes fabricated" --body-file <file>
+cd "$WT" && gh pr create --base main --head "$BRANCH" --title "AUGMENTATIONS: <n> notes augmented" --body-file <file>
 ```
 
 If `oargatamas` isn't logged in, stop and give the person `! gh auth login` to add it; don't
@@ -58,20 +60,20 @@ say in the report that `gh` is back on it. (`git push` uses git's own stored cre
 `gh` account; it is inside the switch only so the call is all in one place.)
 
 The body: a short intro, then one bullet per commit, in order: the note's text (from the
-`DATA-LITANY:` line of the commit message), then the commit's subject and short sha. End it with
+`AUGMENTATION:` line of the commit message, or `DATA-LITANY:` in commits from before the rename), then the commit's subject and short sha. End it with
 the session's PR attribution line, if any. If the branch already has an open PR (an earlier
 petition), just push: the PR picks up the new commits; say so and give its link. Merging is the
 person's: never merge, not even with `oargatamas`.
 
-## 5. Clear the litany state
+## 5. Clear the augment state
 
 ```bash
 git -C "$REPO" worktree remove "$WT"
-rm -f $D/litany-branch $D/litany-skipped
+rm -f $D/augment-branch $D/augment-skipped $D/litany-branch $D/litany-skipped
 ```
 
 The branch stays (local and on GitHub) for the PR. The done notes stay in `todos.md` with their
-commits; the next `wh:fabricate` opens a new branch from `origin/main`.
+commits; the next `wh:augment` opens a new branch from `origin/main`.
 
 ## 6. Report
 

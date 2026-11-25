@@ -1,10 +1,10 @@
 #!/bin/bash
-# Waits until the DATA-LITANY (AUSPEX) has an open todo that isn't on the skipped list, then
+# Waits until the AUGMENTATIONS (AUSPEX) has an open todo that isn't on the skipped list, then
 # prints "<line>\t<text>" for the first one and exits. Run it in the background; it never
 # changes anything.
-#   litany-watch.sh [seconds between looks, default 5]
+#   augment-watch.sh [seconds between looks, default 5]
 set -u
-D="$HOME/.local/share/herdr-claude"; F="$D/todos.md"; S="$D/litany-skipped"
+D="$HOME/.local/share/herdr-claude"; F="$D/todos.md"; S="$D/augment-skipped"
 while :; do
   if [ -f "$F" ]; then
     hit=$(awk -v skip="$S" '
