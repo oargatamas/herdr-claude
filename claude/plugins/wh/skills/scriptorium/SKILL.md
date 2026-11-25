@@ -5,10 +5,10 @@ description: Open a markdown file in the SCRIPTORIUM, a floating Herdr window sh
 
 # Scriptorium
 
-The `scriptorium` Herdr mod is a floating window (drag it anywhere; it reopens where it was
-dropped) that shows one markdown file: it opens on the render; SOURCE and SPLIT (source beside
-render) are a click away. It
-re-reads the file every second, so edits show while it is open.
+The `scriptorium` Herdr mod shows markdown files in floating windows, one window per file (drag
+each anywhere; it reopens where it was dropped). A window opens on the render; SOURCE and SPLIT
+(source beside render) are a click away. It re-reads its file every second, so edits show while
+it is open.
 
 ## Open a file
 
@@ -18,11 +18,13 @@ re-reads the file every second, so edits show while it is open.
 
 `<base>` is the "Base directory for this skill" shown when it loads. The script resolves the
 path, hands it to the mod (Herdr's `mod.open` takes no arguments, so the path goes through
-`~/.local/share/herdr-claude/scriptorium`) and opens the window, or, if it is already open,
-just switches it to the new file. Resolve which file the person means first (search the working
-folder if they only give a name); one file at a time.
+`~/.local/share/herdr-claude/scriptorium`) and opens the window; while a scriptorium is open,
+each further file gets a window of its own (a file that already has one keeps it). Resolve
+which file the person means first (search the working folder if they only give a name). For
+several files, run the script once per file, a second apart (each run is one request, and the
+open windows take requests once a second).
 
-Tell the person in one line which file is shown. If the script fails, report its message: not
+Tell the person in one line which files are shown. If the script fails, report its message: not
 in Herdr, or the mod isn't installed (herdr-claude's `install.sh` installs it).
 
 ## What it can't do
@@ -33,4 +35,4 @@ or links relative to the file may not resolve. It only shows the file; editing i
 elsewhere (Claude, or an editor), and the window follows the change. Say so if the person asks
 for more than that.
 
-Close it with its × (or `herdr-app do overlay.close`).
+Close each window with its ×.

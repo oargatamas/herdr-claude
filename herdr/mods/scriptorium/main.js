@@ -1,39 +1,87 @@
-// SCRIPTORIUM: a floating window showing a markdown file twice, its source (read-only, with line
-// numbers and markdown colouring) beside its render. Opened by the wh:scriptorium skill
-// (`open-md.sh <file>`), which writes the file's path to REQUEST and runs `mod.open scriptorium`
-// (mod.open takes no props, so the path goes through that file). While open it follows REQUEST
-// (another file replaces the shown one) and the file itself (edits show within a second).
+// SCRIPTORIUM: floating windows, each showing one markdown file: its render, or its source
+// (read-only, with line numbers and markdown colouring), or both side by side. Opened by the
+// wh:scriptorium skill (`open-md.sh <file>`), which writes {path, id} to REQUEST and, when no
+// scriptorium is open, runs `mod.open scriptorium` (mod.open takes no props, so the path goes
+// through that file): that first window takes the request. While any is open, each new request
+// gets a window of its own, opened by whichever window sees it first (openOverlay with the
+// file as its key and prop), unless that file already has one. Each window follows its file:
+// edits show within a second.
 // Read-only: it never writes the file. It lives inside the Herdr window, like every mod overlay:
 // Herdr gives mods no OS window of their own, so it can't be dragged onto another display.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, EditorState, Editor, TextView } from "gpui-base";
-import { theme, home, shared, props, closeOverlay, readTextFile, checking } from "herdr";
+import { theme, home, shared, setShared, props, openOverlay, closeOverlay, readTextFile, checking } from "herdr";
 
 const motion = () => shared("mechanicus.motion") !== false;
 const REQUEST = () => `${home()}/.local/share/herdr-claude/scriptorium`;
 const EVERY = 1000;
 const MODES = [["source", "SOURCE"], ["split", "SPLIT"], ["render", "RENDER"]];
 
+// The latest request: { path, id }; a bare path (as earlier versions wrote) is its own id.
+async function readRequest() {
+  const raw = ((await readTextFile(REQUEST()).catch(() => null)) ?? "").trim();
+  if (!raw) return null;
+  try { const j = JSON.parse(raw); return j?.path ? { path: String(j.path), id: String(j.id ?? j.path) } : null; }
+  catch { return { path: raw, id: raw }; }
+}
+// The open windows, { [overlay]: { path, at } }, each refreshed every second while it's open
+// (a window that went without a goodbye drops out after a few seconds).
+const WINDOWS = "scriptorium.windows", HANDLED = "scriptorium.handled";
+const liveWindows = () => Object.fromEntries(Object.entries(shared(WINDOWS) ?? {})
+  .filter(([, w]) => w && Date.now() - (w.at ?? 0) < 5 * EVERY));
+
 export default class Scriptorium extends View {
   init(_props, cx) {
-    this.path = null;
+    // The window mod.open made has the key "scriptorium"; the others, their file.
+    this.overlay = props()?.overlay ?? (props()?.path ? `scriptorium:${props().path}` : "scriptorium");
+    this.path = props()?.path ?? null; // a window opened for one file keeps it
     this.text = null; // null: not read yet; false: unreadable
     this.mode = "render"; // it opens on the render; SOURCE / SPLIT last while it's open
     this.source = EditorState.new({ language: "markdown", readonly: true, soft_wrap: true, folding: false, value: "" });
     if (checking()) return;
-    this.reload(cx);
-    cx.timer.every(EVERY, (cx) => this.reload(cx));
+    cx.spawn(async (cx) => {
+      // The window mod.open made: it shows the request it was opened for.
+      if (!this.path) { const r = await readRequest(); if (r) { this.path = r.path; setShared(HANDLED, r.id); } }
+      this.beat();
+      this.reload(cx);
+    });
+    cx.timer.every(EVERY, (cx) => { this.beat(); this.reload(cx); this.takeRequest(cx); });
   }
 
-  // The requested path, then that file's text; redraws only on a change.
+  close() {
+    const w = { ...(shared(WINDOWS) ?? {}) };
+    delete w[this.overlay];
+    setShared(WINDOWS, w);
+  }
+
+  // Tells the other windows which file this one shows.
+  beat() {
+    if (!this.overlay || !this.path) return;
+    setShared(WINDOWS, { ...liveWindows(), [this.overlay]: { path: this.path, at: Date.now() } });
+  }
+
+  // A request no window has taken yet: a window of its own, unless its file has one already.
+  takeRequest(cx) {
+    cx.spawn(async () => {
+      const r = await readRequest();
+      if (!r || shared(HANDLED) === r.id) return;
+      setShared(HANDLED, r.id);
+      const shown = Object.values(liveWindows());
+      if (shown.some((w) => w.path === r.path)) return;
+      const n = shown.length;
+      openOverlay({ mod: "scriptorium", kind: "window", key: `scriptorium:${r.path}`, width: 0.6, height: 0.75,
+        at: { x: 120 + 36 * n, y: 80 + 36 * n }, props: { path: r.path } });
+    });
+  }
+
+  // This window's file; redraws only on a change.
   reload(cx) {
     cx.spawn(async (cx) => {
-      const path = ((await readTextFile(REQUEST()).catch(() => null)) ?? "").trim() || null;
+      const path = this.path;
       const text = path ? await readTextFile(path).catch(() => null) : null;
       const next = path && text == null ? false : text;
-      if (path === this.path && next === this.text) return;
-      this.path = path;
+      if (next === this.text) return;
       this.text = next;
       this.source.set_value(typeof next === "string" ? next : "");
       cx.notify();
