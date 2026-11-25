@@ -19,7 +19,7 @@ Custom commands (in `~/.local/bin`):
 - `hc-worker start|list|stop|prune`: parallel workers in Herdr splits (or tabs) and git worktrees. For
   splitting work across agents, use the `wh:conclave` skill, which drives it; for one Claude beside you to work
   with by hand, the `wh:servo-skull` skill. The `wh` plugin also has `wh:reconsecrate` (update
-  from the repo), `wh:fabricate` (DATA-LITANY notes become commits) and `wh:petition` (their PR).
+  from the repo), `wh:augment` (AUSPEX's AUGMENTATIONS, the self-improvement notes, become commits) and `wh:petition` (their PR).
 
 Each Claude terminal carries the labels `herdr.profile` and `herdr.claude-session` (set by a
 SessionStart hook); `claude --resume <session> --fork-session` forks a conversation.

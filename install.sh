@@ -64,7 +64,7 @@ say "Claude Code hook and status-line scripts → $MAIN"
 mkdir -p "$MAIN"
 for f in statusline-account.sh herdr-profile-label.sh; do install -m 0755 "$REPO/claude/$f" "$HOME/.claude/$f"; ok "$f"; done
 
-say "Skills: the wh plugin (wh:conclave, wh:servo-skull, wh:reconsecrate, wh:fabricate, wh:petition)"
+say "Skills: the wh plugin (wh:conclave, wh:servo-skull, wh:reconsecrate, wh:augment, wh:petition)"
 # Skills that earlier versions copied into ~/.claude/skills (and linked into other profiles):
 # removed when they are ours, so the plugin's skills don't trigger twice.
 for p in "${PROFILES[@]}"; do
@@ -95,8 +95,8 @@ if command -v claude >/dev/null; then
 else
   warn "claude not on PATH: the wh plugin (the skills) isn't installed"
 fi
-# Where the clone is, for wh:reconsecrate, wh:fabricate and wh:petition. Run from a worktree (fabricate's
-# litany), it still records the main clone.
+# Where the clone is, for wh:reconsecrate, wh:augment and wh:petition. Run from a worktree (augment's),
+# it still records the main clone.
 CLONE=$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$REPO/.git")")
 mkdir -p "$HOME/.local/share/herdr-claude"; echo "$CLONE" > "$HOME/.local/share/herdr-claude/repo"
 

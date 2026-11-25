@@ -6,7 +6,7 @@
     {
       "name": "wh",
       "source": "./claude/plugins/wh",
-      "description": "The Mechanicus skills: conclave, servo-skull, reconsecrate, fabricate and petition."
+      "description": "The Mechanicus skills: conclave, servo-skull, reconsecrate, augment and petition."
     }
   ]
 }

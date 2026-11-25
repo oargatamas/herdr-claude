@@ -3,9 +3,9 @@
 //     message in a dialog), submodules with their state and branch (found for detached commits)
 //   PULL-PETITIONS & CI: (a failing PR gets a DIAGNOSE button: Claude in a split, asked why) the PR of every session in the shown tab and PR links found in
 //     those terminals' text, with checks and review state (via gh)
-//   DATA-LITANY: todos for improving the Herdr mods and Claude, in a markdown file
+//   AUGMENTATIONS: self-improvement notes for the Herdr mods and Claude, in a markdown file
 //     (~/.local/share/herdr-claude/todos.md); the expand icon shows them all in a dialog;
-//     the FABRICATE toggle starts or stops a hidden Claude running the fabricate skill
+//     the AUGMENT toggle starts or stops a hidden Claude running the wh:augment skill
 //   Jira keys (ABC-123) in branches and PR titles get a link to the Jira site seen in sessions
 // AUSPEX: read-only engineering readings for the focused terminal's repository, in the
 // Mechanicus look. It never changes anything: git and gh are only asked questions
@@ -98,13 +98,16 @@ const RITES = {
 const riteFrames = (kind) => RITES[kind].flatMap((l) => [`${l}.`, `${l}..`, `${l}...`, `${l}...`]);
 const PULSE = ["▰▱▱▱▱", "▰▰▱▱▱", "▰▰▰▱▱", "▱▰▰▰▱", "▱▱▰▰▰", "▱▱▱▰▰", "▱▱▱▱▰", "▱▱▱▱▱"];
 
-// The FABRICATE toggle: a Claude session without a pane (hc terminal FABRICATOR) running the
-// wh:fabricate skill in the herdr-claude clone, on the personal profile (the repo is personal).
-const FABRICATOR = "litany-fabricator";
+// The AUGMENT toggle: a Claude session without a pane (hc terminal AUGMENTOR) running the
+// wh:augment skill in the herdr-claude clone, on the personal profile (the repo is personal).
+// LEGACY_AUGMENTOR is the name it had as the fabricator, still recognised while one runs.
+const AUGMENTOR = "augmentor", LEGACY_AUGMENTOR = "litany-fabricator";
+// The skill's note watcher (and its name before the rename), to see a session running it by hand.
+const WATCHER = "augment-watch\\.sh|litany-watch\\.sh";
 const repoFile = () => `${home()}/.local/share/herdr-claude/repo`;
-// DATA-LITANY todos: a markdown checklist anyone can also edit by hand.
+// AUGMENTATIONS todos: a markdown checklist anyone can also edit by hand.
 const notesFile = () => `${home()}/.local/share/herdr-claude/todos.md`;
-const NOTES_HEAD = "# Herdr + Claude improvement notes\n\nTodos added from AUSPEX (DATA-LITANY). Edit freely: lines like `- [ ] text` are the todos; lines indented by two spaces below one continue it.\n\n";
+const NOTES_HEAD = "# Herdr + Claude improvement notes\n\nSelf-improvement todos added from AUSPEX (AUGMENTATIONS). Edit freely: lines like `- [ ] text` are the todos; lines indented by two spaces below one continue it.\n\n";
 // A todo is a `- [ ] …` / `- [x] …` line; a multi-line one continues on the lines below it that
 // are indented by two or more spaces (Markdown's list continuation). Other lines are kept as they are.
 const TODO_LINE = /^\s*[-*] \[([ xX])\] (.*)$/;
@@ -215,7 +218,7 @@ export default class Auspex extends View {
       if (key !== this.cwdKey || Date.now() - (this.gitAt ?? 0) > GIT_EVERY) this.refresh(cx);
       const tk = this.tabKey();
       if (tk !== this.tabKeyNow || Date.now() - (this.tabAt ?? 0) > MENTION_EVERY) this.loadTab(cx);
-      if (Date.now() - (this.notesAt ?? 0) > NOTES_EVERY) { this.loadNotes(cx); this.loadFabricator(cx); }
+      if (Date.now() - (this.notesAt ?? 0) > NOTES_EVERY) { this.loadNotes(cx); this.loadAugmentor(cx); }
     });
     this.refresh(cx);
     this.loadTab(cx);
@@ -476,7 +479,7 @@ export default class Auspex extends View {
       .when(!compact, (el) => el.child(div().flex_none().text_size(9).text_color(t.accent).frames(PULSE, 140)));
   }
 
-  // ── DATA-LITANY: todo notes in notesFile(), shared by the sidebar and the dialog.
+  // ── AUGMENTATIONS: todo notes in notesFile(), shared by the sidebar and the dialog.
   initNotes(cx) {
     this.notesText = null;
     // The sidebar has a one-line field (Enter adds); the dialog a multi-line box (cmd-enter adds,
@@ -486,7 +489,7 @@ export default class Auspex extends View {
       : InputState.new({ placeholder: "New todo for the mods or Claude… (Enter adds)" });
     if (this.notesDialog) this.todoInput.set_soft_wrap(true);
     // The todo being typed is kept (per sidebar / dialog) so a mod reload, e.g. an install while
-    // fabricating, doesn't lose it; it is cleared once added.
+    // augmenting, doesn't lose it; it is cleared once added.
     this.draftKey = `todo-draft:${this.notesDialog ? "dialog" : "sidebar"}`;
     try { const d = localStorage.getItem(this.draftKey); if (d) this.todoInput.set_value(d); } catch {}
     this.todoInput.on("change", () => { try { localStorage.setItem(this.draftKey, this.todoInput.value()); } catch {} });
@@ -494,7 +497,7 @@ export default class Auspex extends View {
     this.fab = null;
     if (checking()) return;
     this.loadNotes(cx);
-    this.loadFabricator(cx);
+    this.loadAugmentor(cx);
     if (this.notesDialog) {
       this.todoInput.focus();
       cx.timer.after(300, () => this.todoInput.focus());
@@ -502,46 +505,49 @@ export default class Auspex extends View {
     }
   }
 
-  // The fabricator's state: null (none), { address, status } of its live terminal, or
-  // { elsewhere: true } when another session runs the fabricate watcher (one fabricator at a time).
-  loadFabricator(cx) {
+  // The augmentor's state: null (none), { address, status } of its live terminal, or
+  // { elsewhere: true } when another session runs the augment watcher (one augmentor at a time).
+  loadAugmentor(cx) {
     if (this.fabBusy) return;
     cx.spawn(async (cx) => {
-      const r = await hc(["get", FABRICATOR, "--json"]).catch(() => null);
       let fab = null;
-      if (r?.code === 0) { try { const j = JSON.parse(r.stdout); if (j.state === "live") fab = { address: j.address, status: j.status?.state ?? "" }; } catch {} }
+      for (const name of [AUGMENTOR, LEGACY_AUGMENTOR]) {
+        const r = await hc(["get", name, "--json"]).catch(() => null);
+        if (r?.code === 0) { try { const j = JSON.parse(r.stdout); if (j.state === "live") fab = { address: j.address, status: j.status?.state ?? "" }; } catch {} }
+        if (fab) break;
+      }
       if (!fab) {
-        const w = await exec("pgrep", ["-f", "fabricate/litany-watch.sh"]).catch(() => null);
+        const w = await exec("pgrep", ["-f", WATCHER]).catch(() => null);
         if (w?.code === 0) fab = { elsewhere: true };
       }
       if (JSON.stringify(fab) !== JSON.stringify(this.fab)) { this.fab = fab; cx.notify(); }
     });
   }
 
-  // Start the fabricator when none runs, else end it. Its commits stay on the litany branch.
-  toggleFabricator(cx) {
+  // Start the augmentor when none runs, else end it. Its commits stay on the augment branch.
+  toggleAugmentor(cx) {
     if (this.fabBusy) return;
     this.fabBusy = true;
     cx.notify();
     cx.spawn(async (cx) => {
-      if (this.fab?.elsewhere) { /* another session fabricates: stop it there */ }
+      if (this.fab?.elsewhere) { /* another session augments: stop it there */ }
       else if (this.fab) {
-        await hc(["kill", FABRICATOR]).catch(() => null);
-        await hc(["rm", FABRICATOR]).catch(() => null);
+        await hc(["kill", this.fab.address]).catch(() => null);
+        await hc(["rm", this.fab.address]).catch(() => null);
       } else {
         const repo = ((await readTextFile(repoFile()).catch(() => null)) ?? `${home()}/projects/herdr-claude`).trim();
-        await hc(["rm", FABRICATOR]).catch(() => null); // an exited one keeps the name
-        await hc(["run", "--bg", "--json", "--name", FABRICATOR, "--no-parent", "--outlive-parent",
-          "--label", "herdr.fabricate=1", "--cwd", repo,
-          `${home()}/.local/bin/claude-ws`, "--profile", "personal", "--", "/wh:fabricate"]).catch(() => null);
+        await hc(["rm", AUGMENTOR]).catch(() => null); // an exited one keeps the name
+        await hc(["run", "--bg", "--json", "--name", AUGMENTOR, "--no-parent", "--outlive-parent",
+          "--label", "herdr.augment=1", "--cwd", repo,
+          `${home()}/.local/bin/claude-ws`, "--profile", "personal", "--", "/wh:augment"]).catch(() => null);
       }
       this.fabBusy = false;
-      this.loadFabricator(cx);
+      this.loadAugmentor(cx);
     });
   }
 
-  // Show the hidden fabricator in a tab (to answer a question it asks, or watch it work).
-  showFabricator() {
+  // Show the hidden augmentor in a tab (to answer a question it asks, or watch it work).
+  showAugmentor() {
     if (this.fab?.address) run("terminal.keep", { terminal: this.fab.address, place: "tab" });
   }
 
@@ -636,7 +642,7 @@ export default class Auspex extends View {
     return v_flex().size_full().bg(t.popover).border(1).border_color(t.accent)
       .child(h_flex().h(36).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.input).text_size(12).text_color(t.accent)
         .child(svg("mods/chrome-mechanicus/gear.svg").size(13).when(motion(), (g) => g.spin(9000)))
-        .child("DATA-LITANY · improvement notes").child(div().flex_1())
+        .child("AUGMENTATIONS · self-improvement notes").child(div().flex_1())
         .child(div().text_size(10.5).text_color(t.dim).child(`${open.length} open · ${done.length} done`))
         .child(div().id("close-notes").px(6).cursor_pointer().text_color(t.dim).hover((el) => el.text_color(t.foreground))
           .on_click(() => closeOverlay(props().overlay)).child(svg("mods/chrome-mechanicus/x.svg").size(13))))
@@ -802,27 +808,27 @@ export default class Auspex extends View {
       }
     }
 
-    // ── DATA-LITANY: todos for improving the mods and Claude
+    // ── AUGMENTATIONS: self-improvement todos for the mods and Claude
     {
       const todos = parseTodos(this.notesText), open = todos.filter((x) => !x.done);
-      // FABRICATE: blue when no fabricator runs, green while one watches the notes, amber when it
+      // AUGMENT: blue when no augmentor runs, green while one watches the notes, amber when it
       // waits for the person (then the eye shows its terminal).
       const fab = this.fab, waiting = fab?.status === "blocked", elsewhere = Boolean(fab?.elsewhere);
       const fabColor = this.fabBusy ? t.dim : !fab ? (t.ansi4 ?? t.accent) : waiting ? t.working : (t.ansi2 ?? t.done);
-      const fabBtn = div().id("fabricate-toggle").flex_none().px(4).border(1).border_color(fabColor).text_color(fabColor)
+      const fabBtn = div().id("augment-toggle").flex_none().px(4).border(1).border_color(fabColor).text_color(fabColor)
         .text_size(10).cursor_pointer().hover((el) => el.bg(fabColor).text_color(t.background))
         .when(Boolean(fab) && !waiting && motion(), (el) => el.loop("opacity", { from: 0.55, to: 1, period: 1600 }))
-        .tooltip(this.fabBusy ? "…" : !fab ? "Start a hidden Claude that implements these notes, one commit each (fabricate)"
-          : elsewhere ? "Another Claude session is fabricating these notes: stop it there"
-          : waiting ? "The fabricator waits for you: the eye shows it. Click to stop it"
-          : "The fabricator watches these notes. Click to stop it (its commits stay on the litany branch)")
-        .on_click((_e, cx) => { cx.stop_propagation(); this.toggleFabricator(cx); })
-        .child(this.fabBusy ? "⚙ …" : fab ? (waiting ? "⚙ AWAITS YOU" : "⚙ FABRICATING") : "⚙ FABRICATE");
-      const fabEye = div().id("fabricate-show").flex_none().px(2).cursor_pointer().text_size(11).text_color(waiting ? t.working : t.dim)
-        .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Show the fabricator's terminal in a tab")
-        .on_click((_e, cx) => { cx.stop_propagation(); this.showFabricator(); })
+        .tooltip(this.fabBusy ? "…" : !fab ? "Start a hidden Claude that implements these notes, one commit each (augment)"
+          : elsewhere ? "Another Claude session is augmenting from these notes: stop it there"
+          : waiting ? "The augmentor waits for you: the eye shows it. Click to stop it"
+          : "The augmentor watches these notes. Click to stop it (its commits stay on the augment branch)")
+        .on_click((_e, cx) => { cx.stop_propagation(); this.toggleAugmentor(cx); })
+        .child(this.fabBusy ? "⚙ …" : fab ? (waiting ? "⚙ AWAITS YOU" : "⚙ AUGMENTING") : "⚙ AUGMENT");
+      const fabEye = div().id("augment-show").flex_none().px(2).cursor_pointer().text_size(11).text_color(waiting ? t.working : t.dim)
+        .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Show the augmentor's terminal in a tab")
+        .on_click((_e, cx) => { cx.stop_propagation(); this.showAugmentor(); })
         .child("◉");
-      body.child(heading("✎", "DATA-LITANY", `${open.length} open`)
+      body.child(heading("✎", "AUGMENTATIONS", `${open.length} open`)
         .child(fabBtn)
         .when(Boolean(fab) && !elsewhere, (el) => el.child(fabEye))
         .child(div().id("notes-expand").flex_none().p(1).cursor_pointer().text_color(t.dim)
