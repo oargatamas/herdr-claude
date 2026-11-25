@@ -1,11 +1,11 @@
 ---
 name: petition
-description: Publish the DATA-LITANY work collected by the fabricate skill: stop watching the notes, push the litany branch of herdr-claude and open a pull request to main with one line per implemented note, then clear the litany state so the next fabricate starts a fresh branch. Use when the user asks to petition, publish, push or open the PR for the fabricated / DATA-LITANY / AUSPEX notes.
+description: Publish the DATA-LITANY work collected by the wh:fabricate skill: stop watching the notes, push the litany branch of herdr-claude and open a pull request to main with one line per implemented note, then clear the litany state so the next fabricate starts a fresh branch. Use when the user says "petition" or "petition the Omnissiah", or asks to publish, push or open the PR for the fabricated / DATA-LITANY / AUSPEX notes.
 ---
 
 # Petition of the Litany
 
-Turns the branch that `fabricate` filled (one commit per DATA-LITANY note) into a pull request.
+Turns the branch that `wh:fabricate` filled (one commit per DATA-LITANY note) into a pull request.
 Never merge it: the person reviews and merges.
 
 ## 1. Stop watching
@@ -71,9 +71,9 @@ rm -f $D/litany-branch $D/litany-skipped
 ```
 
 The branch stays (local and on GitHub) for the PR. The done notes stay in `todos.md` with their
-commits; the next `fabricate` opens a new branch from `origin/main`.
+commits; the next `wh:fabricate` opens a new branch from `origin/main`.
 
 ## 6. Report
 
 The PR link, the notes in it, that `gh` is back on the account it was on, and that after
-merging, `reconsecrate` installs the result from `main`.
+merging, `wh:reconsecrate` installs the result from `main`.

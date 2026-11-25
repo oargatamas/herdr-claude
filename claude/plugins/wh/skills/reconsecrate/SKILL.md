@@ -1,6 +1,6 @@
 ---
 name: reconsecrate
-description: Update the herdr-claude customizations (Herdr mods, layouts, themes, keys, Claude hooks, skills, CLAUDE.md block) from the remote repository. Throws away local changes in the herdr-claude clone (kept in a stash and a backup branch), resets it to the latest origin/main and runs install.sh. Use when the user asks to update, refresh, reinstall, re-sync or "reconsecrate" herdr-claude, the Mechanicus look, AUSPEX, SERVITORS or the Herdr plugin/mods from remote.
+description: Update the herdr-claude customizations (Herdr mods, layouts, themes, keys, Claude hooks, skills, CLAUDE.md block) from the remote repository. Throws away local changes in the herdr-claude clone (kept in a stash and a backup branch), resets it to the latest origin/main and runs install.sh. Use when the user asks to update, refresh, reinstall, re-sync, "reconsecrate" or perform the "rite of reconsecration" on herdr-claude, the Mechanicus look, AUSPEX, SERVITORS or the Herdr plugin/mods from remote.
 ---
 
 # Rite of Reconsecration

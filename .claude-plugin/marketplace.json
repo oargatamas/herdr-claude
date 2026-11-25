@@ -1,0 +1,12 @@
+{
+  "name": "herdr-claude",
+  "owner": { "name": "oargatamas" },
+  "description": "Herdr + Claude customizations: the wh plugin with the Mechanicus skills.",
+  "plugins": [
+    {
+      "name": "wh",
+      "source": "./claude/plugins/wh",
+      "description": "The Mechanicus skills: conclave, servo-skull, reconsecrate, fabricate and petition."
+    }
+  ]
+}

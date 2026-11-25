@@ -99,7 +99,7 @@ const riteFrames = (kind) => RITES[kind].flatMap((l) => [`${l}.`, `${l}..`, `${l
 const PULSE = ["▰▱▱▱▱", "▰▰▱▱▱", "▰▰▰▱▱", "▱▰▰▰▱", "▱▱▰▰▰", "▱▱▱▰▰", "▱▱▱▱▰", "▱▱▱▱▱"];
 
 // The FABRICATE toggle: a Claude session without a pane (hc terminal FABRICATOR) running the
-// fabricate skill in the herdr-claude clone, on the personal profile (the repo is personal).
+// wh:fabricate skill in the herdr-claude clone, on the personal profile (the repo is personal).
 const FABRICATOR = "litany-fabricator";
 const repoFile = () => `${home()}/.local/share/herdr-claude/repo`;
 // DATA-LITANY todos: a markdown checklist anyone can also edit by hand.
@@ -517,7 +517,7 @@ export default class Auspex extends View {
         await hc(["rm", FABRICATOR]).catch(() => null); // an exited one keeps the name
         await hc(["run", "--bg", "--json", "--name", FABRICATOR, "--no-parent", "--outlive-parent",
           "--label", "herdr.fabricate=1", "--cwd", repo,
-          `${home()}/.local/bin/claude-ws`, "--profile", "personal", "--", "/fabricate"]).catch(() => null);
+          `${home()}/.local/bin/claude-ws`, "--profile", "personal", "--", "/wh:fabricate"]).catch(() => null);
       }
       this.fabBusy = false;
       this.loadFabricator(cx);

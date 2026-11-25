@@ -64,26 +64,38 @@ say "Claude Code hook and status-line scripts → $MAIN"
 mkdir -p "$MAIN"
 for f in statusline-account.sh herdr-profile-label.sh; do install -m 0755 "$REPO/claude/$f" "$HOME/.claude/$f"; ok "$f"; done
 
-say "Skills"
-mkdir -p "$MAIN/skills"
-# Earlier names of these skills (hc-parallel-dev, then parallel and split): removed when they are
-# ours (a Herdr skill), so the old and new names don't both trigger.
+say "Skills: the wh plugin (wh:conclave, wh:servo-skull, wh:reconsecrate, wh:fabricate, wh:petition)"
+# Skills that earlier versions copied into ~/.claude/skills (and linked into other profiles):
+# removed when they are ours, so the plugin's skills don't trigger twice.
 for p in "${PROFILES[@]}"; do
-  for old in hc-parallel-dev parallel split; do
+  for old in hc-parallel-dev parallel split conclave servo-skull reconsecrate fabricate petition; do
     d="$p/skills/$old"
-    if { [ -L "$d" ] && [[ "$(readlink "$d")" == "$MAIN/skills/"* ]]; } || { [ ! -L "$d" ] && grep -qs "Herdr" "$d/SKILL.md"; }; then rm -rf "$d"; ok "removed old skill $d"; fi
+    if { [ -L "$d" ] && [[ "$(readlink "$d")" == "$MAIN/skills/"* ]]; } || { [ ! -L "$d" ] && grep -qis "herdr" "$d/SKILL.md"; }; then rm -rf "$d"; ok "removed old skill $d"; fi
   done
 done
-for sk in "$REPO"/claude/skills/*/; do
-  sk=$(basename "$sk")
-  rm -rf "$MAIN/skills/$sk"; cp -R "$REPO/claude/skills/$sk" "$MAIN/skills/"
-  ok "$MAIN/skills/$sk"
-  for p in "${PROFILES[@]:1}"; do
-    mkdir -p "$p/skills"; rm -rf "$p/skills/$sk"; ln -s "$MAIN/skills/$sk" "$p/skills/$sk"
-    ok "$p/skills/$sk → $MAIN/skills/$sk"
+# The plugin is served from a local marketplace copied to a fixed place, so it keeps working
+# whether this runs from the clone or from a worktree that goes away later.
+MP="$HOME/.local/share/herdr-claude/marketplace"
+rm -rf "$MP"; mkdir -p "$MP/claude/plugins"
+cp -R "$REPO/.claude-plugin" "$MP/"; cp -R "$REPO/claude/plugins/wh" "$MP/claude/plugins/"
+ok "marketplace herdr-claude → $MP"
+if command -v claude >/dev/null; then
+  for p in "${PROFILES[@]}"; do
+    known=$(jq -r '."herdr-claude".installLocation // empty' "$p/plugins/known_marketplaces.json" 2>/dev/null || true)
+    if [ -n "$known" ] && [ "$known" != "$MP" ]; then
+      CLAUDE_CONFIG_DIR="$p" claude plugin marketplace remove herdr-claude >/dev/null 2>&1 || true
+    fi
+    if CLAUDE_CONFIG_DIR="$p" claude plugin marketplace add "$MP" >/dev/null 2>&1 \
+      && CLAUDE_CONFIG_DIR="$p" claude plugin install wh@herdr-claude --scope user >/dev/null 2>&1; then
+      ok "$p: wh@herdr-claude"
+    else
+      warn "$p: couldn't install the wh plugin; run: CLAUDE_CONFIG_DIR=$p claude plugin install wh@herdr-claude"
+    fi
   done
-done
-# Where the clone is, for reconsecrate, fabricate and petition. Run from a worktree (fabricate's
+else
+  warn "claude not on PATH: the wh plugin (the skills) isn't installed"
+fi
+# Where the clone is, for wh:reconsecrate, wh:fabricate and wh:petition. Run from a worktree (fabricate's
 # litany), it still records the main clone.
 CLONE=$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$REPO/.git")")
 mkdir -p "$HOME/.local/share/herdr-claude"; echo "$CLONE" > "$HOME/.local/share/herdr-claude/repo"

@@ -1,7 +1,8 @@
 // The keybind list (Herdr's prefix+?), grouped, filterable by typing.
 // Reads keys.json through keys(); edit keys.json to change any of them.
 // A second tab, SKILLS, lists the Claude skills in the herdr-claude repository
-// (claude/skills/*/SKILL.md: name and description) and whether each is installed.
+// (the wh plugin: claude/plugins/wh/skills/*/SKILL.md, name and description) and whether the
+// plugin is installed.
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
@@ -49,14 +50,16 @@ function label(action, keys = "") {
 // The repo's skills: [{ name, description, installed }], read from the clone install.sh recorded.
 async function repoSkills() {
   const repo = ((await readTextFile(`${home()}/.local/share/herdr-claude/repo`).catch(() => null)) ?? `${home()}/projects/herdr-claude`).trim();
-  const ls = await exec("ls", [`${repo}/claude/skills`]).catch(() => null);
+  const dir0 = `${repo}/claude/plugins/wh/skills`;
+  const ls = await exec("ls", [dir0]).catch(() => null);
   if (!ls || ls.code !== 0) return { repo, skills: [] };
+  const plugins = (await readTextFile(`${home()}/.claude/plugins/installed_plugins.json`).catch(() => null)) ?? "";
+  const installed = plugins.includes('"wh@herdr-claude"');
   const dirs = ls.stdout.split("\n").map((x) => x.trim()).filter(Boolean);
   const skills = await Promise.all(dirs.map(async (dir) => {
-    const text = (await readTextFile(`${repo}/claude/skills/${dir}/SKILL.md`).catch(() => null)) ?? "";
+    const text = (await readTextFile(`${dir0}/${dir}/SKILL.md`).catch(() => null)) ?? "";
     const front = text.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
     const field = (k) => front.match(new RegExp(`^${k}:\\s*(.*)$`, "m"))?.[1]?.trim() ?? "";
-    const installed = (await readTextFile(`${home()}/.claude/skills/${dir}/SKILL.md`).catch(() => null)) !== null;
     return { name: field("name") || dir, description: field("description"), installed };
   }));
   return { repo, skills };
@@ -87,11 +90,11 @@ export default class Help extends View {
   skillRows(t, f) {
     if (!this.skills) return [div().px(8).text_color(t.dim).child("Reading the skills…")];
     const shown = this.skills.skills.filter((s) => !f || s.name.toLowerCase().includes(f) || s.description.toLowerCase().includes(f));
-    if (!shown.length) return [div().px(8).text_color(t.dim).child(this.skills.skills.length ? "No skill matches." : `No skills found in ${this.skills.repo}/claude/skills.`)];
+    if (!shown.length) return [div().px(8).text_color(t.dim).child(this.skills.skills.length ? "No skill matches." : `No skills found in ${this.skills.repo}/claude/plugins/wh/skills.`)];
     return shown.map((s) =>
       v_flex().id(`skill-${s.name}`).px(8).py(6).gap(3).rounded(7)
         .child(h_flex().gap(8).items_center()
-          .child(div().text_color(t.accent).font_medium().child(`/${s.name}`))
+          .child(div().text_color(t.accent).font_medium().child(`/wh:${s.name}`))
           .child(div().text_size(10.5).text_color(t.dim).child(s.installed ? "installed" : "not installed: run install.sh")))
         .child(div().text_color(t.foreground).child(s.description)));
   }
