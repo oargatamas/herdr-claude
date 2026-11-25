@@ -35,4 +35,5 @@ or links relative to the file may not resolve. It only shows the file; editing i
 elsewhere (Claude, or an editor), and the window follows the change. Say so if the person asks
 for more than that.
 
-Close each window with its ×.
+Close each window with its ×, or Esc in the window that has the keyboard (the one last
+pressed, or the newest).
