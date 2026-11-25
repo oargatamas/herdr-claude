@@ -1,12 +1,12 @@
 ---
 name: servo-skull
-description: Open a new, independent Claude session in a Herdr split pane next to this one, fresh or as a fork of this conversation, optionally in another folder or with a first prompt, on the model and effort that fit its task (haiku / sonnet / opus). Use when the user asks to "split", "open a new claude in a split", "split and start claude", "fork this into a split", or wants another Claude beside them to work in by hand. For coordinated workers that report back, use the conclave skill instead. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
+description: Open a new, independent Claude session in a Herdr split pane next to this one, fresh or as a fork of this conversation, optionally in another folder or with a first prompt, on the model and effort that fit its task (haiku / sonnet / opus). Use when the user asks for a "servo", a "servo-skull" or to "send a servo-skull", or to "split", "open a new claude in a split", "split and start claude", "fork this into a split", or wants another Claude beside them to work in by hand. For coordinated workers that report back, use the wh:conclave skill instead. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
 ---
 
 # Open a Claude session in a split
 
 The new session belongs to the person: you open it and step away. Don't send it tasks,
-read it or wait on it unless they ask (for workers you coordinate, use the `conclave` skill).
+read it or wait on it unless they ask (for workers you coordinate, use the `wh:conclave` skill).
 
 ## 1. Choose the model and effort
 
@@ -35,8 +35,10 @@ Don't ask the person to confirm the choice: say it in one line when you report t
 ## 2. Run
 
 ```sh
-~/.claude/skills/servo-skull/split.sh [right|down] [--model M --effort E] [--folder DIR] [--fork] [--profile company|personal] [-- <claude args>]
+<base>/split.sh [right|down] [--model M --effort E] [--folder DIR] [--fork] [--profile company|personal] [-- <claude args>]
 ```
+
+(`<base>` is the "Base directory for this skill" shown when it loads: the skill lives in the `wh` plugin, not in `~/.claude/skills`)
 
 | Want | Command |
 |---|---|

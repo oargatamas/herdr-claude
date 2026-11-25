@@ -1,6 +1,6 @@
 ---
 name: fabricate
-description: Watch the DATA-LITANY notes in AUSPEX (~/.local/share/herdr-claude/todos.md) and implement each open note in the herdr-claude repository, one commit per note, on a litany branch in its own worktree. Keeps watching and collecting commits until the person asks to publish them (the petition skill). Use when the user asks to "fabricate", watch or work through the DATA-LITANY / AUSPEX notes or todos, or implement the improvement notes for the mods and Claude.
+description: Watch the DATA-LITANY notes in AUSPEX (~/.local/share/herdr-claude/todos.md) and implement each open note in the herdr-claude repository, one commit per note, on a litany branch in its own worktree. Keeps watching and collecting commits until the person asks to publish them (the wh:petition skill). Use when the user says "fabricate", "fabricator" or "rite of fabrication", asks to watch or work through the DATA-LITANY / AUSPEX notes or todos, or implement the improvement notes for the mods and Claude.
 ---
 
 # Rite of Fabrication
@@ -8,7 +8,7 @@ description: Watch the DATA-LITANY notes in AUSPEX (~/.local/share/herdr-claude/
 The person writes improvement notes for the Herdr mods and Claude in AUSPEX's DATA-LITANY
 section. You watch that list, and for every open note you implement it in the herdr-claude
 repository and commit it: **one note, one commit**, all on one branch. You keep going until the
-person asks to publish (the `petition` skill opens the PR); don't push or open a PR yourself.
+person asks to publish (the `wh:petition` skill opens the PR); don't push or open a PR yourself.
 
 ## Where things are
 
@@ -18,9 +18,9 @@ person asks to publish (the `petition` skill opens the PR); don't push or open a
 | The clone | `REPO=$(cat ~/.local/share/herdr-claude/repo 2>/dev/null \|\| echo ~/projects/herdr-claude)` (written by `install.sh`) |
 | The work | a git worktree at `WT=~/.local/share/herdr-claude/litany`, on the branch named in `~/.local/share/herdr-claude/litany-branch` |
 | Notes you were told to skip | `~/.local/share/herdr-claude/litany-skipped`, one note text per line |
-| The watcher | `~/.claude/skills/fabricate/litany-watch.sh` |
+| The watcher | `<base>/litany-watch.sh`, where `<base>` is the "Base directory for this skill" shown when it loads (the `wh` plugin) |
 
-The worktree keeps the work away from the clone itself, which `reconsecrate` resets.
+The worktree keeps the work away from the clone itself, which `wh:reconsecrate` resets.
 
 ## 1. Open or reuse the litany branch
 
@@ -50,7 +50,7 @@ Start the watcher **in the background** (Bash with `run_in_background: true`), s
 woken when a note appears and the session stays free meanwhile:
 
 ```bash
-~/.claude/skills/fabricate/litany-watch.sh
+<base>/litany-watch.sh
 ```
 
 It prints `<line>\t<note>` for the first open note that isn't skipped and exits. Tell the
@@ -99,6 +99,6 @@ to step 2 (start the watcher again).
 
 ## Stopping
 
-- "Publish", "open the PR", "petition": use the `petition` skill. It stops the watcher.
+- "Publish", "open the PR", "petition": use the `wh:petition` skill. It stops the watcher.
 - "Stop watching" (without publishing): stop the background watcher and leave the branch and
-  worktree as they are; the next `fabricate` carries on with them.
+  worktree as they are; the next `wh:fabricate` carries on with them.
