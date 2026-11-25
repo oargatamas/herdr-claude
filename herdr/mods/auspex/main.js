@@ -538,7 +538,7 @@ export default class Auspex extends View {
         const repo = ((await readTextFile(repoFile()).catch(() => null)) ?? `${home()}/projects/herdr-claude`).trim();
         await hc(["rm", AUGMENTOR]).catch(() => null); // an exited one keeps the name
         await hc(["run", "--bg", "--json", "--name", AUGMENTOR, "--no-parent", "--outlive-parent",
-          "--label", "herdr.augment=1", "--cwd", repo,
+          "--label", "herdr.augment=1", "--label", "herdr.servitor=Augmentor", "--cwd", repo,
           `${home()}/.local/bin/claude-ws`, "--profile", "personal", "--", "/wh:augment"]).catch(() => null);
       }
       this.fabBusy = false;
@@ -546,9 +546,10 @@ export default class Auspex extends View {
     });
   }
 
-  // Show the hidden augmentor in a tab (to answer a question it asks, or watch it work).
+  // Peek at the augmentor over the tab (to answer a question it asks, or watch it work): it stays
+  // out of the workspace's tabs; the peek's keep-as-tab gives it one if wanted. Servitors lists it too.
   showAugmentor() {
-    if (this.fab?.address) run("terminal.keep", { terminal: this.fab.address, place: "tab" });
+    if (this.fab?.address) run("terminal.peek", { terminal: this.fab.address });
   }
 
   loadNotes(cx) {
@@ -820,12 +821,12 @@ export default class Auspex extends View {
         .when(Boolean(fab) && !waiting && motion(), (el) => el.loop("opacity", { from: 0.55, to: 1, period: 1600 }))
         .tooltip(this.fabBusy ? "…" : !fab ? "Start a hidden Claude that implements these notes, one commit each (augment)"
           : elsewhere ? "Another Claude session is augmenting from these notes: stop it there"
-          : waiting ? "The augmentor waits for you: click to open its terminal (■ stops it)"
+          : waiting ? "The augmentor waits for you: click to peek at its terminal (■ stops it)"
           : "The augmentor watches these notes. Click to stop it (its commits stay on the augment branch)")
         .on_click((_e, cx) => { cx.stop_propagation(); if (waiting && !elsewhere && !this.fabBusy) this.showAugmentor(); else this.toggleAugmentor(cx); })
         .child(this.fabBusy ? "⚙ …" : fab ? (waiting ? "⚙ AWAITS YOU" : "⚙ AUGMENTING") : "⚙ AUGMENT");
       const fabEye = div().id("augment-show").flex_none().px(2).cursor_pointer().text_size(11).text_color(waiting ? t.working : t.dim)
-        .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Show the augmentor's terminal in a tab")
+        .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Peek at the augmentor's terminal")
         .on_click((_e, cx) => { cx.stop_propagation(); this.showAugmentor(); })
         .child("◉");
       const fabStop = div().id("augment-stop").flex_none().px(2).cursor_pointer().text_size(10).text_color(t.dim)
