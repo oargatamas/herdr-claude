@@ -60,7 +60,7 @@ const kidStatus = (k, listed) => {
   return s === "error" ? "blocked" : s === "done" ? "idle" : s;
 };
 // Servitors without a pane that ask to be listed: a live root terminal labelled
-// herdr.servitor=<name> (AUSPEX's augmentor; herdr.fabricate is its label from before).
+// herdr.servitor=<name> (AUSPEX's paneless augmentor of earlier versions; herdr.fabricate before that).
 // They get a NOOSPHERE group of their own and are peeked at, never given a tab here.
 const unseenName = (k) => k.labels?.["herdr.servitor"] || (k.labels?.["herdr.fabricate"] ? "Augmentor" : null);
 const rawStatus = (k) => (typeof k.status === "object" ? k.status?.state : k.status) ?? "idle";

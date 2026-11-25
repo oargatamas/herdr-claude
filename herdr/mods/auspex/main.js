@@ -98,10 +98,14 @@ const RITES = {
 const riteFrames = (kind) => RITES[kind].flatMap((l) => [`${l}.`, `${l}..`, `${l}...`, `${l}...`]);
 const PULSE = ["▰▱▱▱▱", "▰▰▱▱▱", "▰▰▰▱▱", "▱▰▰▰▱", "▱▱▰▰▰", "▱▱▱▰▰", "▱▱▱▱▰", "▱▱▱▱▱"];
 
-// The AUGMENT toggle: a Claude session without a pane (hc terminal AUGMENTOR) running the
-// wh:augment skill in the herdr-claude clone, on the personal profile (the repo is personal).
-// LEGACY_AUGMENTOR is the name it had as the fabricator, still recognised while one runs.
-const AUGMENTOR = "augmentor", LEGACY_AUGMENTOR = "litany-fabricator";
+// The AUGMENT toggle: a Herdr space AUGMENT_SPACE, opened without taking the focus, whose Claude
+// (personal profile: the repo is personal) runs the wh:augment skill in the herdr-claude clone
+// and sends a servo-skull beside it for each note. Closing the space ends them all.
+const AUGMENT_SPACE = "AUGMENTORIUM";
+const augmentSpace = () => spaces().find((s) => s.named && s.name === AUGMENT_SPACE) ?? null;
+// Earlier versions ran it without a pane, as an hc terminal of one of these names: still
+// recognised (and stopped) while one runs.
+const LEGACY_AUGMENTORS = ["augmentor", "litany-fabricator"];
 // The skill's note watcher (and its name before the rename), to see a session running it by hand.
 const WATCHER = "augment-watch\\.sh|litany-watch\\.sh";
 const repoFile = () => `${home()}/.local/share/herdr-claude/repo`;
@@ -505,13 +509,19 @@ export default class Auspex extends View {
     }
   }
 
-  // The augmentor's state: null (none), { address, status } of its live terminal, or
-  // { elsewhere: true } when another session runs the augment watcher (one augmentor at a time).
+  // The augmentor's state: { space, status } of the AUGMENTORIUM (read live in augmentor()), else
+  // what this finds: { address, status } of a paneless one from before, or { elsewhere: true }
+  // when another session runs the augment watcher (one augmentor at a time), or null.
+  augmentor() {
+    const sp = augmentSpace();
+    return sp ? { space: sp.id, status: sp.status ?? "" } : this.fab;
+  }
+
   loadAugmentor(cx) {
     if (this.fabBusy) return;
     cx.spawn(async (cx) => {
       let fab = null;
-      for (const name of [AUGMENTOR, LEGACY_AUGMENTOR]) {
+      for (const name of LEGACY_AUGMENTORS) {
         const r = await hc(["get", name, "--json"]).catch(() => null);
         if (r?.code === 0) { try { const j = JSON.parse(r.stdout); if (j.state === "live") fab = { address: j.address, status: j.status?.state ?? "" }; } catch {} }
         if (fab) break;
@@ -524,32 +534,35 @@ export default class Auspex extends View {
     });
   }
 
-  // Start the augmentor when none runs, else end it. Its commits stay on the augment branch.
+  // Open the AUGMENTORIUM when no augmentor runs (the shown space keeps the focus), else close it,
+  // ending its Claude and servo-skulls. The commits stay on the augment branch.
   toggleAugmentor(cx) {
     if (this.fabBusy) return;
+    const fab = this.augmentor();
     this.fabBusy = true;
     cx.notify();
     cx.spawn(async (cx) => {
-      if (this.fab?.elsewhere) { /* another session augments: stop it there */ }
-      else if (this.fab) {
-        await hc(["kill", this.fab.address]).catch(() => null);
-        await hc(["rm", this.fab.address]).catch(() => null);
+      if (fab?.elsewhere) { /* another session augments: stop it there */ }
+      else if (fab?.space) run("space.close", { id: fab.space, confirmed: true });
+      else if (fab?.address) {
+        await hc(["kill", fab.address]).catch(() => null);
+        await hc(["rm", fab.address]).catch(() => null);
       } else {
         const repo = ((await readTextFile(repoFile()).catch(() => null)) ?? `${home()}/projects/herdr-claude`).trim();
-        await hc(["rm", AUGMENTOR]).catch(() => null); // an exited one keeps the name
-        await hc(["run", "--bg", "--json", "--name", AUGMENTOR, "--no-parent", "--outlive-parent",
-          "--label", "herdr.augment=1", "--label", "herdr.servitor=Augmentor", "--cwd", repo,
-          `${home()}/.local/bin/claude-ws`, "--profile", "personal", "--", "/wh:augment"]).catch(() => null);
+        run("space.new", { name: AUGMENT_SPACE, folder: repo, focus: false,
+          argv: [`${home()}/.local/bin/claude-ws`, "--profile", "personal", "--", "/wh:augment"] });
       }
       this.fabBusy = false;
       this.loadAugmentor(cx);
     });
   }
 
-  // Peek at the augmentor over the tab (to answer a question it asks, or watch it work): it stays
-  // out of the workspace's tabs; the peek's keep-as-tab gives it one if wanted. Servitors lists it too.
+  // Show the augmentor (to answer a question it or a servo-skull asks, or watch them work): its
+  // space, or a peek at a paneless one from before.
   showAugmentor() {
-    if (this.fab?.address) run("terminal.peek", { terminal: this.fab.address });
+    const fab = this.augmentor();
+    if (fab?.space) run("space.select", { id: fab.space });
+    else if (fab?.address) run("terminal.peek", { terminal: fab.address });
   }
 
   loadNotes(cx) {
@@ -812,25 +825,25 @@ export default class Auspex extends View {
     // ── AUGMENTATIONS: self-improvement todos for the mods and Claude
     {
       const todos = parseTodos(this.notesText), open = todos.filter((x) => !x.done);
-      // AUGMENT: blue when no augmentor runs, green while one watches the notes, amber when it
-      // waits for the person: then the button opens its terminal, and a ■ beside it stops it.
-      const fab = this.fab, waiting = fab?.status === "blocked", elsewhere = Boolean(fab?.elsewhere);
+      // AUGMENT: blue when no augmentor runs, green while one watches the notes, amber when it or
+      // a servo-skull waits for the person: then the button shows it, and a ■ beside it stops it.
+      const fab = this.augmentor(), waiting = fab?.status === "blocked", elsewhere = Boolean(fab?.elsewhere);
       const fabColor = this.fabBusy ? t.dim : !fab ? (t.ansi4 ?? t.accent) : waiting ? t.working : (t.ansi2 ?? t.done);
       const fabBtn = div().id("augment-toggle").flex_none().px(4).border(1).border_color(fabColor).text_color(fabColor)
         .text_size(10).cursor_pointer().hover((el) => el.bg(fabColor).text_color(t.background))
         .when(Boolean(fab) && !waiting && motion(), (el) => el.loop("opacity", { from: 0.55, to: 1, period: 1600 }))
-        .tooltip(this.fabBusy ? "…" : !fab ? "Start a hidden Claude that implements these notes, one commit each (augment)"
+        .tooltip(this.fabBusy ? "…" : !fab ? "Open the AUGMENTORIUM space (in the background): a Claude that sends a servo-skull for each note, one commit each"
           : elsewhere ? "Another Claude session is augmenting from these notes: stop it there"
-          : waiting ? "The augmentor waits for you: click to peek at its terminal (■ stops it)"
-          : "The augmentor watches these notes. Click to stop it (its commits stay on the augment branch)")
+          : waiting ? "The augmentor or a servo-skull waits for you: click to show it (■ stops the AUGMENTORIUM)"
+          : "The augmentor works these notes. Click to close the AUGMENTORIUM (its commits stay on the augment branch)")
         .on_click((_e, cx) => { cx.stop_propagation(); if (waiting && !elsewhere && !this.fabBusy) this.showAugmentor(); else this.toggleAugmentor(cx); })
         .child(this.fabBusy ? "⚙ …" : fab ? (waiting ? "⚙ AWAITS YOU" : "⚙ AUGMENTING") : "⚙ AUGMENT");
       const fabEye = div().id("augment-show").flex_none().px(2).cursor_pointer().text_size(11).text_color(waiting ? t.working : t.dim)
-        .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Peek at the augmentor's terminal")
+        .hover((el) => el.text_color(t.accent).bg(t.hover)).tooltip("Show the augmentor")
         .on_click((_e, cx) => { cx.stop_propagation(); this.showAugmentor(); })
         .child("◉");
       const fabStop = div().id("augment-stop").flex_none().px(2).cursor_pointer().text_size(10).text_color(t.dim)
-        .hover((el) => el.text_color(t.blocked).bg(t.hover)).tooltip("Stop the augmentor (its commits stay on the augment branch)")
+        .hover((el) => el.text_color(t.blocked).bg(t.hover)).tooltip("Stop the augmentor: close the AUGMENTORIUM (its commits stay on the augment branch)")
         .on_click((_e, cx) => { cx.stop_propagation(); this.toggleAugmentor(cx); })
         .child("■");
       body.child(heading("✎", "AUGMENTATIONS", `${open.length} open`)
