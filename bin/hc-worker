@@ -1,6 +1,6 @@
 #!/bin/bash
 # hc-worker: start, list and stop parallel Claude workers, each in its own Herdr pane and
-# (by default) its own git worktree. Used by the hc-parallel-dev skill; run it from inside
+# (by default) its own git worktree. Used by the conclave skill; run it from inside
 # the orchestrating Claude's terminal ($HC_TERMINAL_ID is the orchestrator).
 #
 #   hc-worker start --name NAME [options] -- "task"

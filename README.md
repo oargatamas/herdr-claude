@@ -24,7 +24,7 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
 ### Notes for Claude when installing
 
 - Read `install.sh` before running it. It only writes: `~/.local/bin/{claude-ws,hc-worker}`,
-  `~/.claude/{statusline-account.sh,herdr-profile-label.sh}`, the `hc-parallel-dev` and `reconsecrate` skills, a
+  `~/.claude/{statusline-account.sh,herdr-profile-label.sh}`, the `conclave`, `servo-skull` and `reconsecrate` skills, a
   marked block in each profile's `CLAUDE.md`, merged entries in each profile's `settings.json`,
   and its own mods, layout and keys under `~/.config/herdr-app`. Backups:
   `*.bak-herdr-claude-<time>` next to every settings file it changes.
@@ -56,10 +56,12 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
 - **Profile everywhere**: Claude's status line shows `● COMPANY` / `● PERSONAL` and the account
   email; Herdr's sidebar and tab bar show a coloured badge for every space and tab running Claude
   (layouts `mechanicus-grey` and `mechanicus-green`).
-- **`hc-parallel-dev` skill**: "split this into workers" → plan, workers as splits beside the
+- **`conclave` skill**: "split this into workers" → plan, workers as splits beside the
   orchestrator (or tabs) in git worktrees, each on a model and effort the orchestrator picks from
   the task's complexity (`haiku`/`sonnet`/`opus`, `hc-worker start --model … --effort …`) (`hc-worker start`), coordination with `hc send` / `hc wait`, review, merge, cleanup
   (`hc-worker stop`, `hc-worker prune`).
+- **`servo-skull` skill**: "open a Claude in a split" → one independent Claude beside you,
+  fresh or a fork of this conversation, on the model and effort that fit; yours to work with.
 - **`reconsecrate` skill**: "update herdr-claude" → local changes in the clone set aside
   (stash / backup branch), reset to `origin/main`, `install.sh` run again.
 - **`CLAUDE.md` block**: every session knows it runs in Herdr and about these commands.
@@ -73,7 +75,7 @@ Profiles: company = `~/.claude` (`claude`), personal = `~/.claude-personal`
 ## How a worker's model is chosen
 
 The orchestrating Claude chooses each worker's model and effort **by judgment, following the
-rules in the `hc-parallel-dev` skill**. Nothing scores tasks automatically: `hc-worker` only
+rules in the `conclave` skill**. Nothing scores tasks automatically: `hc-worker` only
 starts the worker on what it is told (`--model`, `--effort`).
 
 1. While planning, the orchestrator writes each worker's task (goal, scope, interfaces, done)
@@ -138,7 +140,8 @@ sidebar.
 | `claude/herdr-profile-label.sh` | SessionStart/End hook: labels the terminal with `herdr.profile` and `herdr.claude-session` |
 | `claude/settings.fragment.json` | Merged into each profile's `settings.json` |
 | `claude/CLAUDE.md` | Managed block in each profile's `CLAUDE.md` |
-| `claude/skills/hc-parallel-dev/` | The skill (linked into every profile) |
+| `claude/skills/conclave/` | Parallel workers skill (linked into every profile) |
+| `claude/skills/servo-skull/` | Opens one Claude beside you in a split, fresh or a fork (`split.sh`; linked into every profile) |
 | `claude/skills/reconsecrate/` | Update skill: resets this clone to `origin/main` (local work kept in a stash / backup branch) and runs `install.sh` (linked into every profile) |
 | `herdr/mods/claude-space/` | The `cmd-shift-n` form |
 | `herdr/mods/claude-fork*/` | Fork into a tab, or a split per direction (a shortcut can't pass arguments to a mod) |

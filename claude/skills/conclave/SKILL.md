@@ -1,6 +1,6 @@
 ---
-name: hc-parallel-dev
-description: Real parallel development with independent Claude workers in Herdr split panes beside you, coordinated through herdr-core (hc). The orchestrator picks each worker's model and effort (haiku / sonnet / opus) from the task's complexity. Each implementing worker gets its own git worktree; workers can start fresh or as a fork of this conversation; all coordination uses hc send / hc wait / hc read / hc interrupt. Use when the user asks to split work across agents, run tasks in parallel, "spin up workers", fan out implementation, delegate to workers in splits or tabs, or fork this conversation into workers. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
+name: conclave
+description: Real parallel development with independent Claude workers in Herdr split panes beside you, coordinated through herdr-core (hc). The orchestrator picks each worker's model and effort (haiku / sonnet / opus) from the task's complexity. Each implementing worker gets its own git worktree; workers can start fresh or as a fork of this conversation; all coordination uses hc send / hc wait / hc read / hc interrupt. Use when the user asks to split work across agents, run tasks in parallel, "spin up workers", fan out implementation, delegate to workers in splits or tabs, or fork this conversation into workers. For one Claude beside you that you work with by hand, use the servo-skull skill instead. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
 ---
 
 # Parallel development with hc workers
