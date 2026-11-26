@@ -91,7 +91,7 @@ export default class Composer extends View {
       })
       .child(h_flex().h(36).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.input).text_size(12).text_color(t.accent)
         .child(svg("mods/chrome-mechanicus/square-pen.svg").size(13))
-        .child(`COMPOSE · ${p.name ?? p.terminal ?? ""}`)
+        .child(`LITANY · ${p.name ?? p.terminal ?? ""}`)
         .child(div().flex_1())
         .child(div().text_size(10.5).text_color(t.dim).child(`${lines} lines · ${text.length} chars`))
         .child(div().id("composer-close").px(6).cursor_pointer().text_color(t.dim).hover((el) => el.text_color(t.foreground))
