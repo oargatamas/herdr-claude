@@ -41,6 +41,20 @@ fails, report its message: not in Herdr, or the mods aren't installed (herdr-cla
 `install.sh` installs them and sets up the SCRIPTORIUM window). If the SCRIPTORIUM window isn't
 set up, the script uses the person's window and says so.
 
+## Close a data-slate
+
+```bash
+<base>/close-md.sh <path/to/file>...         # close those files' data-slates in the SCRIPTORIUM window
+<base>/close-md.sh --here <path/to/file>...  # in the person's own Herdr window
+<base>/close-md.sh --all                     # every data-slate there (--here --all: in their window)
+```
+
+Use it when the person asks to close a data-slate, or when you are done showing one you opened for
+them. Close only the files you opened or they named; `--all` only when they ask for all. Herdr can't
+close a mod's window by key, so the script writes a request file (`<home>/scriptorium-close`) that
+each open data-slate reads within a second, closing itself when its file is named. A file with no
+open window is ignored; the file itself is never touched.
+
 ## What it can't do
 
 It stays within Herdr's own rendering (gpui's markdown view, only for markdown files). A data-slate can't leave the Herdr
@@ -50,6 +64,6 @@ its top left). No HTML/CSS styling, and images or links relative to the file may
 only shows the file; editing is done elsewhere (Claude, or an editor), and the window follows the
 change. Say so if the person asks for more than that.
 
-Close each data-slate with its ×, or Esc in the one that has the keyboard (the one last pressed,
+The person closes each data-slate with its ×, or Esc in the one that has the keyboard (the one last pressed,
 or the newest). The SCRIPTORIUM window closes like any app window (⌘Q there quits only it); the
 person's terminals are not in it and keep running.
