@@ -10,7 +10,7 @@
 // and closes itself. While any window is open, each new request gets a window of its own, opened
 // by whichever window sees it first (openOverlay keyed by the file), unless that file already has
 // one. Each window follows its file: edits show within a second. Esc closes the window that has
-// the keyboard.
+// the keyboard; Claude closes them through the close request file (see readClose).
 // Resizing: the windows draw their own frame (frame "none") and are sized by their content, so a
 // window is as big as this mod says: grab its right edge, bottom edge or bottom-right corner and
 // drag. Herdr anchors a window at its top left, so the left and top edges don't stretch (drag the
@@ -51,6 +51,15 @@ async function readRequest() {
   try { const j = JSON.parse(raw); return j?.path ? { path: String(j.path), id: String(j.id ?? j.path) } : null; }
   catch { return { path: raw, id: raw }; }
 }
+// A close request, { id, at, all?, paths? } in <home>/scriptorium-close (close-md.sh writes it; herdr-app
+// can't close a mod's overlay by its key, and status doesn't show their ids): every window sees it
+// and closes itself when its file is named (or all). A request older than the window is ignored.
+const CLOSE = () => `${appHome()}/scriptorium-close`;
+async function readClose() {
+  const raw = ((await readTextFile(CLOSE()).catch(() => null)) ?? "").trim();
+  try { const j = JSON.parse(raw); return j?.id ? { id: String(j.id), at: Number(j.at) || 0, all: j.all === true, paths: Array.isArray(j.paths) ? j.paths.map(String) : [] } : null; }
+  catch { return null; }
+}
 // The open windows, { [key]: { path, at } }, each refreshed every second while it's open
 // (a window that went without a goodbye drops out after a few seconds).
 const WINDOWS = "scriptorium.windows", HANDLED = "scriptorium.handled";
@@ -75,6 +84,7 @@ export default class Scriptorium extends View {
     this.path = props()?.path ?? null;
     this.key = keyFor(this.path);
     this.size = sizeFor(this.path);
+    this.born = Date.now();
     this.drag = null; // while resizing: { edge: "e" | "s" | "se", x, y, w, h } at the press
     this.text = null; // null: not read yet; false: unreadable
     this.md = isMarkdown(this.path); // other files: read-only text (.env coloured), no render
@@ -87,7 +97,7 @@ export default class Scriptorium extends View {
     cx.timer.after(200, () => this.handle.focus());
     this.beat();
     this.reload(cx);
-    cx.timer.every(EVERY, (cx) => { this.beat(); this.reload(cx); this.takeRequest(cx); });
+    cx.timer.every(EVERY, (cx) => { this.beat(); this.reload(cx); this.takeRequest(cx); this.takeClose(cx); });
   }
 
   close() {
@@ -123,6 +133,16 @@ export default class Scriptorium extends View {
       if (!r || shared(HANDLED) === r.id) return;
       setShared(HANDLED, r.id);
       openWindow(r.path);
+    });
+  }
+
+  // A close request naming this window's file (or all): it closes.
+  takeClose(cx) {
+    cx.spawn(async () => {
+      const r = await readClose();
+      if (!r || r.at < this.born || this.closedBy === r.id) return;
+      this.closedBy = r.id;
+      if (r.all || r.paths.includes(this.path)) closeOverlay(props().overlay);
     });
   }
 
