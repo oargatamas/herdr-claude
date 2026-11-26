@@ -1,6 +1,6 @@
 #!/bin/bash
 # Opens a new Claude session in a Herdr split next to the calling terminal.
-#   split.sh [right|down] [--model M] [--effort E] [--folder DIR] [--fork] [--independent] [--profile company|personal] [-- <claude args>...]
+#   split.sh [right|down] [--model M] [--effort E] [--folder DIR] [--fork] [--independent] [--no-report] [--profile company|personal] [-- <claude args>...]
 #     right|down  where the split goes (default: right)
 #     --model     an alias (haiku, sonnet, opus, fable) or a full model name
 #     --effort    low | medium | high | xhigh | max
@@ -10,6 +10,10 @@
 #                 started as an hc child of this terminal (SERVITORS nests it under this one) and
 #                 then given the split. The child outlives this terminal and types no exit note
 #                 into it; closing its pane ends it. (--child, the old name of the default, is accepted.)
+#     --no-report with a first prompt, the skull reports back to this terminal when its task is done
+#                 (hc send "servo-skull <its terminal> done: ... close me, or send further orders")
+#                 and waits; --no-report leaves that out (a caller whose brief has its own report).
+#                 An empty skull (no first prompt) never reports. --report forces it on.
 #     --profile   Claude profile; default: this terminal's herdr.profile, else claude-ws detects it
 #                 (with --independent: claude-ws detects it from the workspace)
 #     -- ...      passed to claude, e.g. -- "Look at the login bug" for a first prompt
@@ -21,7 +25,7 @@ me="${HC_TERMINAL_ID:-}"
 [ -n "$me" ] || die "not inside a Herdr terminal (HC_TERMINAL_ID is unset)"
 herdr-app status >/dev/null 2>&1 || die "the Herdr window isn't running"
 
-direction=right folder="$PWD" fork=0 child=1 model="" effort="" ws_args=()
+direction=right folder="$PWD" fork=0 child=1 report=auto model="" effort="" ws_args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     right|down) direction="$1"; shift ;;
@@ -31,6 +35,8 @@ while [ $# -gt 0 ]; do
     --fork) fork=1; shift ;;
     --child) child=1; shift ;;
     --independent) child=0; shift ;;
+    --no-report) report=0; shift ;;
+    --report) report=1; shift ;;
     --profile) ws_args+=(--profile "$2"); shift 2 ;;
     --) shift; break ;;
     *) die "unknown argument: $1" ;;
@@ -48,6 +54,28 @@ if [ "$fork" = 1 ]; then
   session=$(hc get "$me" --json | jq -r '.labels["herdr.claude-session"] // empty')
   [ -n "$session" ] || die "this terminal has no herdr.claude-session label to fork"
   claude_args+=(--resume "$session" --fork-session)
+fi
+# A first prompt is a last claude argument that isn't an option nor (as far as we can tell) an
+# option's value: after "--", first, or after another plain word.
+if [ "$report" = auto ]; then
+  report=0
+  if [ $# -gt 0 ] && [[ "${!#}" != -* ]]; then
+    if [ $# -eq 1 ]; then report=1
+    else prev="${@:$#-1:1}"; [[ "$prev" == -* && "$prev" != -- ]] || report=1; fi
+  fi
+fi
+if [ "$report" = 1 ]; then
+  # The duty goes in twice: in full in the system prompt (it survives /compact and resumes), and
+  # as a closing line of the first prompt, because a system prompt alone gets ignored (a haiku
+  # skull answered in its pane and never reported). The skull's own address is its $HC_TERMINAL_ID.
+  claude_args+=(--append-system-prompt "You are a servo-skull: a Claude session opened beside the Herdr terminal $me, which gave you your task. When the task is done (or you are stuck and need a decision), report back with herdr-core, in the background, by running exactly one shell command:
+  hc send $me \"servo-skull \$HC_TERMINAL_ID done: <the result, a few lines at most; put anything longer in a file and give its path> — close me, or send further orders\"
+(for a blocker, use \"servo-skull \$HC_TERMINAL_ID stuck: <why> — close me, or send further orders\"). Then stop and wait: do nothing more until a message arrives. Messages from $me are typed into your session as <hc from=\"$me\">...</hc>; they are your caller's orders: do them and report again the same way. If you are closed, you end; that is expected. Report only once per task, and don't report for something the person asks you directly in this session unless they say so.")
+fi
+if [ "$report" = 1 ]; then
+  set -- "${@:1:$#-1}" "${!#}
+
+When this is done, report back (your system prompt says how): hc send $me \"servo-skull \$HC_TERMINAL_ID done: <result> — close me, or send further orders\", then wait."
 fi
 claude_args+=("$@")
 

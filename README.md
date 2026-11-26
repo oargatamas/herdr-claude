@@ -70,7 +70,8 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
   bottom edge or its corner. They open in the **SCRIPTORIUM window**, a second Herdr window (started when needed) that is blank
   but for a Mechanicus desk, so documents from Claude and its servo-skulls can sit on another display (`--here`: in your own window).
 - **`wh:servo-skull` skill** ("servo", "servo-skull" or "split"): "open a Claude in a split" → one Claude beside you (SERVITORS shows it under your session, but it outlives it; closing its pane ends it),
-  fresh or a fork of this conversation, on the model and effort that fit; yours to work with.
+  fresh or a fork of this conversation, on the model and effort that fit; yours to work with. Given a task, it reports the result back
+  to the calling Claude (`hc send`, "servo-skull <terminal> done: … — close me, or send further orders") and waits, and that Claude relays it and closes it or sends more orders.
 - **`wh:reconsecrate` skill**: "update herdr-claude" → local changes in the clone set aside
   (stash / backup branch), reset to `origin/main`, `install.sh` run again.
 - **`CLAUDE.md` block**: every session knows it runs in Herdr and about these commands.
@@ -152,7 +153,7 @@ sidebar.
 | `.claude-plugin/marketplace.json` | The `herdr-claude` plugin marketplace (one plugin, `wh`); `install.sh` copies it with the plugin to `~/.local/share/herdr-claude/marketplace` and installs `wh@herdr-claude` in every profile |
 | `claude/plugins/wh/` | The `wh` plugin: the Mechanicus skills, called `/wh:<name>` and also by their lore names |
 | `claude/plugins/wh/skills/conclave/` | Parallel workers skill |
-| `claude/plugins/wh/skills/servo-skull/` | Opens one Claude beside you in a split, fresh or a fork (`split.sh`; it starts as an hc child of the caller, so SERVITORS nests it there, outliving the caller; `--independent`: a plain split with no parent) |
+| `claude/plugins/wh/skills/servo-skull/` | Opens one Claude beside you in a split, fresh or a fork (`split.sh`; it starts as an hc child of the caller, so SERVITORS nests it there, outliving the caller; `--independent`: a plain split with no parent; with a first prompt it reports back to the caller with `hc send` and waits to be closed or given more orders, `--no-report` leaves that out) |
 | `claude/plugins/wh/skills/reconsecrate/` | Update skill: resets this clone to `origin/main` (local work kept in a stash / backup branch) and runs `install.sh` |
 | `claude/plugins/wh/skills/augment/` | Watches the AUGMENTATIONS notes (`augment-watch.sh`), sends a servo-skull per note (up to 4 at once, worktrees in `<clone>/.claude/worktrees/augment-<id>`, reporting back with `hc send`) and cherry-picks each one's commit onto an `augment/<time>` branch, in a worktree at `~/.local/share/herdr-claude/augment` (takes over an unpublished `litany` one from before the rename) |
 | `claude/plugins/wh/skills/scriptorium/` | Opens a file in the scriptorium mod (`open-md.sh [--here] <file>`: in the SCRIPTORIUM window, started with `HERDR_APP_HOME=~/.local/share/herdr-claude/scriptorium-window herdr-app` when it isn't running and switched to its `scriptorium` layout, or with `--here` in your window; writes `{path, id}` to that home's `scriptorium-request`, then `mod.open scriptorium` unless one is open, which then opens a window for the file) |
