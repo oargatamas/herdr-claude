@@ -247,6 +247,17 @@ if [ "$HERDR" = 1 ]; then
     mv "$SH/shared.json.tmp" "$SH/shared.json"
     ok "mods scriptorium, scriptorium-desk; layout scriptorium; sounds off (open-md.sh starts it: HERDR_APP_HOME=$SH herdr-app)"
 
+    if [ "$(uname)" = Darwin ]; then
+      say "Dock icons"
+      # The app herdr-app runs (a link into Herdr.app), else the usual place.
+      app=$(bin=$(command -v herdr-app 2>/dev/null) && realpath "$bin" 2>/dev/null | sed -n 's|/Contents/MacOS/[^/]*$||p')
+      [ -d "$app" ] || app=/Applications/Herdr.app
+      if [ ! -d "$app" ]; then warn "no Herdr.app found: Dock icons skipped (herdr/icons/apply-icons.sh --herdr <Herdr.app>)"
+      elif out=$("$REPO/herdr/icons/apply-icons.sh" --herdr "$app" 2>&1); then
+        while IFS= read -r l; do ok "$l"; done <<<"$out"
+      else warn "Dock icons failed: $REPO/herdr/icons/apply-icons.sh --herdr $app ($out)"; fi
+    fi
+
     say "Herdr keys"
     frag=$(sed "s|__HOME__|$HOME|g" "$REPO/herdr/keys.fragment.json")
     conflicts=$(jq -r --argjson f "$frag" '.global as $g | $f.global | to_entries[]

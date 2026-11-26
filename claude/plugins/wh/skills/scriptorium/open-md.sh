@@ -29,8 +29,11 @@ else
   export HERDR_APP_HOME="$SH"
   where="the SCRIPTORIUM window"
   if ! herdr-app status >/dev/null 2>&1; then
-    # Its own Herdr process (same app, same herdr-core), detached from this shell.
-    (nohup herdr-app >/dev/null 2>&1 &)
+    # Its own Herdr process (same herdr-core), detached from this shell: Scriptorium.app (Herdr
+    # with the SCRIPTORIUM Dock icon, built by install.sh) when there is one, else Herdr itself.
+    app="$HOME/Applications/Scriptorium.app/Contents/MacOS/Herdr"
+    [ -x "$app" ] || app=herdr-app
+    (nohup "$app" >/dev/null 2>&1 &)
     for _ in $(seq 1 60); do herdr-app status >/dev/null 2>&1 && break; sleep 0.25; done
     herdr-app status >/dev/null 2>&1 || { echo "the SCRIPTORIUM window didn't start: try HERDR_APP_HOME=$SH herdr-app" >&2; exit 1; }
     herdr-app do overlay.close '{"id":"frame-welcome"}' >/dev/null 2>&1 || true # a new home's welcome
