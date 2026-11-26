@@ -1,13 +1,15 @@
 ---
 name: scriptorium
-description: Open a file in the SCRIPTORIUM, a floating Herdr window: a markdown (.md) file shows its source (read-only, line numbers, markdown colouring) beside its render, with SOURCE / SPLIT / RENDER modes; any other file is a simple read-only text window; it follows edits to the file live. Use when the user says "scriptorium" or "data-slate", or asks to open, show, view, preview or render a markdown (.md) or other text file in Herdr / in a floating window, or to see a markdown file's source and render side by side. Only works inside Herdr ($HC_TERMINAL_ID set).
+description: Open a file in the SCRIPTORIUM, a floating Herdr window: a markdown (.md) file shows its source (read-only, line numbers, markdown colouring) beside its render, with SOURCE / SPLIT / RENDER modes; a .env file is a read-only text window with dotenv colouring; any other file is a simple read-only text window; it follows edits to the file live. Use when the user says "scriptorium" or "data-slate", or asks to open, show, view, preview or render a markdown (.md) or other text file in Herdr / in a floating window, or to see a markdown file's source and render side by side. Only works inside Herdr ($HC_TERMINAL_ID set).
 ---
 
 # Scriptorium
 
 The `scriptorium` Herdr mod shows files in floating windows (data-slates), one per file. A markdown file (`.md`,
-`.markdown`) gets the render; any other file is a simple text window: its read-only text, with
-line numbers, and no SOURCE / SPLIT / RENDER switch.
+`.markdown`) gets the render; a dotenv file (`.env`, or a name ending in `.env` such as `prod.env`; not `.env.local`) is a text window
+with dotenv colouring (comments, keys, `=`, quoted values, `export`, `${VAR}`); any other file is a simple text
+window: its read-only text, with line numbers, and no SOURCE / SPLIT / RENDER switch. Dotenv files hold secrets:
+the window only shows them, so don't copy their values elsewhere.
 Drag one by its title to move it; drag its right edge, bottom edge or bottom-right corner to
 resize it. It reopens where it was dropped, at the size it was given. A markdown window opens on the
 render, with SOURCE and SPLIT (source beside render) a click away. It re-reads its file every
