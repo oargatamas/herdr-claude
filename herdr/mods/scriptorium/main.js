@@ -1,5 +1,6 @@
-// SCRIPTORIUM: floating windows, each showing one markdown file: its render, or its source
-// (read-only, with line numbers and markdown colouring), or both side by side. Opened by the
+// SCRIPTORIUM: floating windows, each showing one file. A markdown file (.md, .markdown) shows its
+// render, or its source (read-only, with line numbers and markdown colouring), or both side by
+// side; any other file is a simple text window: just its read-only text (plain, no render). Opened by the
 // wh:scriptorium skill (`open-md.sh <file>`), which writes {path, id} to this Herdr home's REQUEST
 // file and, when no scriptorium is open, runs `mod.open scriptorium` (mod.open takes no props, so
 // the path goes through that file). The copy mod.open makes is only a launcher: it measures the
@@ -29,6 +30,8 @@ const REQUEST = () => `${appHome()}/scriptorium-request`;
 const EVERY = 1000;
 // The render is set at the terminals' font size (settings.json / the layout), so it reads like them.
 const renderSize = () => { const n = Number(settings()?.font_size); return n > 0 ? n : 13; };
+// Only markdown files get the render (and the SOURCE / SPLIT / RENDER switch).
+const isMarkdown = (path) => /\.(md|markdown)$/i.test(path ?? "");
 const MODES = [["source", "SOURCE"], ["split", "SPLIT"], ["render", "RENDER"]];
 // Sizes: per file, the default one (measured by the launcher), and the limits of a drag.
 const SIZES = "scriptorium.sizes", ROOM = "scriptorium.room", KEEP_SIZES = 40;
@@ -68,8 +71,9 @@ export default class Scriptorium extends View {
     this.size = sizeFor(this.path);
     this.drag = null; // while resizing: { edge: "e" | "s" | "se", x, y, w, h } at the press
     this.text = null; // null: not read yet; false: unreadable
-    this.mode = "render"; // it opens on the render; SOURCE / SPLIT last while it's open
-    this.source = EditorState.new({ language: "markdown", readonly: true, soft_wrap: true, folding: false, value: "" });
+    this.md = isMarkdown(this.path); // other files: plain read-only text, no render
+    this.mode = this.md ? "render" : "source"; // markdown opens on the render; SOURCE / SPLIT last while it's open
+    this.source = EditorState.new({ ...(this.md ? { language: "markdown" } : {}), readonly: true, soft_wrap: true, folding: false, value: "" });
     // The window with the keyboard closes on Esc: a press anywhere in it gives it the keyboard
     // (the source keeps it for itself, and its Esc comes up to the window too), and a new one has it.
     this.handle = cx.focus_handle();
@@ -171,7 +175,7 @@ export default class Scriptorium extends View {
     const stopOnly = (_e, cx) => cx.stop_propagation();
     const name = this.path ? this.path.split("/").pop() : "no data-slate";
     const where = this.path ? this.path.replace(home(), "~") : "";
-    const tabs = h_flex().gap(0).flex_none().children(MODES.map(([id, label]) => div().id(`mode-${id}`).px(6).h(20)
+    const tabs = !this.md ? null : h_flex().gap(0).flex_none().children(MODES.map(([id, label]) => div().id(`mode-${id}`).px(6).h(20)
       .flex().items_center().text_size(10.5).border(1).border_color(this.mode === id ? t.accent : t.input)
       .text_color(this.mode === id ? t.background : t.dim).when(this.mode === id, (el) => el.bg(t.accent))
       .cursor_pointer().hover((el) => (this.mode === id ? el : el.text_color(t.foreground)))
@@ -182,18 +186,21 @@ export default class Scriptorium extends View {
       .child(v_flex().flex_1().min_h(0).on_mouse_down("left", own).child(body));
     let body;
     if (!this.path) body = div().p(16).text_color(t.dim).text_size(12)
-      .child("No data-slate requested. Ask Claude to open a markdown file (the wh:scriptorium skill).");
+      .child("No data-slate requested. Ask Claude to open a file (the wh:scriptorium skill).");
     else if (this.text === false) body = div().p(16).text_color(t.blocked).text_size(12)
       .child(`The machine spirit cannot read ${where}.`);
     else if (this.text == null) body = div().p(16).text_color(t.dim).text_size(12).child("Retrieving the data-slate…");
     else {
-      const src = pane("◇ SOURCE", Editor.new(this.source).size_full(), stopOnly);
+      const src = pane(this.md ? "◇ SOURCE" : "◇ TEXT", Editor.new(this.source).size_full(), stopOnly);
+      if (!this.md) body = src;
+      else {
       const rendered = pane("◆ RENDER", div().id("render-scroll").size_full().px(16).py(10).text_size(renderSize()).overflow_y_scrollbar()
         .child(TextView.markdown("render", this.text).selectable(true)));
       body = h_flex().size_full().min_h(0)
         .when(this.mode !== "render", (el) => el.child(src))
         .when(this.mode === "split", (el) => el.child(div().w(1).h_full().flex_none().bg(t.input)))
         .when(this.mode !== "source", (el) => el.child(rendered));
+      }
     }
     const { w, h } = this.size;
     const d = this.drag;
@@ -207,7 +214,7 @@ export default class Scriptorium extends View {
         .child(div().flex_none().child("SCRIPTORIUM"))
         .child(div().min_w(0).truncate().text_color(t.foreground).child(name))
         .child(div().flex_1().min_w(0).truncate().text_size(10.5).text_color(t.dim).child(where))
-        .child(tabs)
+        .when(tabs, (el) => el.child(tabs))
         .child(div().id("close-scriptorium").px(6).cursor_pointer().text_color(t.dim)
           .hover((el) => el.text_color(t.foreground)).tooltip("Close this window (Esc)")
           .on_mouse_down("left", stop).on_click(() => closeOverlay(props().overlay))
