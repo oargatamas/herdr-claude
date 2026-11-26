@@ -94,7 +94,7 @@ export default class Pane extends View {
         .hover((s) => s.text_color(t.accent).border_color(t.accent))
         .tooltip("Write a long prompt in a big text box")
         .on_click((_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "composer", kind: "dialog", width: 1100, height: 0.75, props: { terminal: p.terminal, pane, name } }); })
-        .child(svg("mods/chrome-mechanicus/square-pen.svg").size(12)).child("COMPOSE")))
+        .child(svg("mods/chrome-mechanicus/square-pen.svg").size(12)).child("LITANY")))
       .when(this.hovered, el => el
         .child(this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
         .child(this.button(t, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))
