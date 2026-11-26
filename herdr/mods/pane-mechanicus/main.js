@@ -1,12 +1,12 @@
 // A pane's header, for layouts that frame their panes:
 //   { "tab": "active", "pane": { "header": { "content": { "mod": "pane-mechanicus" } } } }
-// Shows the program's icon (the app's program table), the agent's name or
-// the terminal's title, the folder, and the agent's status; buttons split, zoom and close
+// Shows the program's icon (the app's program table), a servo-skull's title (its label
+// servo-skull.title, its purpose as the tooltip), the agent's name or the terminal's title, the folder, and the agent's status; buttons split, zoom and close
 // this pane. Props from the app: { pane, terminal }. Click: focus the pane.
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, props, run, theme, home, layout, shared, openOverlay } from "herdr";
+import { panes, terminals, props, run, theme, home, layout, shared, openOverlay } from "herdr";
 
 // Sidebar animations on unless stilled with a click on the brand emblem.
 const motion = () => shared("mechanicus.motion") !== false;
@@ -63,7 +63,11 @@ export default class Pane extends View {
     const t = theme();
     const p = this.me();
     if (!p) return div();
-    const name = ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
+    // A servo-skull's title is a label, so Claude setting its own terminal title can't overwrite it.
+    const labels = p.terminal ? terminals().find((k) => k.address === p.terminal)?.labels : null;
+    const skull = labels?.["servo-skull.title"];
+    const purpose = labels?.["servo-skull.purpose"];
+    const name = skull || ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
     const pic = icon(p.program, 14, t.dim);
     const st = p.status;
     const pane = p.pane;
@@ -83,7 +87,8 @@ export default class Pane extends View {
       .on_click(() => run("pane.focus", { pane }))
       .when(Boolean(pic), (el) => el.child(pic))
       .child(svg("mods/chrome-mechanicus/gear.svg").size(12).flex_none().text_color(p.focused ? t.accent : t.dim).when(p.focused && motion(), g => g.spin(8000)))
-      .child(div().flex_none().truncate().max_w(260).font_medium().text_color(t.foreground).child(name))
+      .child(div().id(`ph-n-${pane}`).flex_none().truncate().max_w(260).font_medium().text_color(t.foreground)
+        .when(Boolean(purpose), (el) => el.tooltip(purpose)).child(name))
       .child(div().flex_1().truncate().text_color(t.dim).child(p.cwd ? `⟨ ${folder(p.cwd)} ⟩` : ""))
       .when(st === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
       .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(0).border(1).border_color(t.blocked).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("⚠ NEEDS YOU")))

@@ -1,13 +1,13 @@
 ---
 name: servo-skull
-description: Open a new Claude session in a Herdr split pane next to this one (an hc child of this session, so SERVITORS nests it here, but it outlives it), fresh or as a fork of this conversation, optionally in another folder or with a first prompt, on the model and effort that fit its task (haiku / sonnet / opus). Use when the user asks for a "servo", a "servo-skull" or to "send a servo-skull", or to "split", "open a new claude in a split", "split and start claude", "fork this into a split", or wants another Claude beside them to work in by hand or to hand one task. A skull given a task reports its result back to this session (hc send) and waits to be closed or given further orders. For several coordinated workers in worktrees, use the wh:conclave skill instead. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
+description: Open a new Claude session in a Herdr split pane next to this one (an hc child of this session, so SERVITORS nests it here, but it outlives it), fresh or as a fork of this conversation, optionally in another folder or with a first prompt, on the model and effort that fit its task (haiku / sonnet / opus). Use when the user asks for a "servo", a "servo-skull" or to "send a servo-skull", or to "split", "open a new claude in a split", "split and start claude", "fork this into a split", or wants another Claude beside them to work in by hand or to hand one task. A skull given a task (and a short title, shown in its pane header and SERVITORS) reports its result back to this session (hc send), then closes itself when nothing is likely to follow or waits to be closed or given further orders. For several coordinated workers in worktrees, use the wh:conclave skill instead. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
 ---
 
 # Open a Claude session in a split
 
 An empty session (no first prompt) belongs to the person: you open it and step away. Don't
 send it tasks, read it or wait on it unless they ask. A session opened **with a task** reports
-back to you when it is done and waits for you (step 4). For several workers you coordinate, use
+back to you when it is done, and then closes itself or waits for you (step 4). For several workers you coordinate, use
 the `wh:conclave` skill.
 
 ## 1. Choose the model and effort
@@ -37,7 +37,7 @@ Don't ask the person to confirm the choice: say it in one line when you report t
 ## 2. Run
 
 ```sh
-<base>/split.sh [right|down] [--model M --effort E] [--folder DIR] [--fork] [--independent] [--no-report] [--profile company|personal] [-- <claude args>]
+<base>/split.sh [right|down] [--model M --effort E] [--folder DIR] [--fork] [--independent] [--title T] [--purpose P] [--no-report|--stay|--leave] [--profile company|personal] [-- <claude args>]
 ```
 
 (`<base>` is the "Base directory for this skill" shown when it loads: the skill lives in the `wh` plugin, not in `~/.claude/skills`)
@@ -46,13 +46,19 @@ Don't ask the person to confirm the choice: say it in one line when you report t
 |---|---|
 | Empty Claude to the right, same folder | `split.sh` |
 | Below this pane | `split.sh down` |
-| With a task as its first prompt | `split.sh --model sonnet --effort medium -- "Add a CSV export to the reports page"` |
+| With a task as its first prompt | `split.sh --model sonnet --effort medium --title "CSV export" --purpose "Add a CSV export to the reports page" -- "Add a CSV export to the reports page"` |
+| A question, always closing itself after | `split.sh --model haiku --effort low --title "Node version" --leave -- "Which Node version does this repo pin?"` |
 | In another folder (e.g. a worktree) | `split.sh --folder ~/code/app/.claude/worktrees/x` |
 | Fork of this conversation | `split.sh --fork --model opus --effort high` |
 
 - It splits **this session's own pane** (found from `$HC_TERMINAL_ID`), not whatever has focus.
 - Claude starts through `claude-ws`, with this session's profile (company/personal), and gets the
   `herdr.profile` / `herdr.claude-session` labels, like the person's `cmd-shift-<arrow>` keys.
+- Give a skull with a task a `--title`: 2-5 words from the task ("CSV export", "Login bug"),
+  which its pane header and SERVITORS show instead of "Claude", so the person can tell skulls
+  apart; and a `--purpose`, one line on what it is for, shown as the tooltip on that name. They
+  are its labels `servo-skull.title` / `servo-skull.purpose`, so Claude setting its own terminal
+  title doesn't overwrite them. Without them nothing changes (an empty skull usually needs none).
 - A task given as the first prompt runs straight away; write it as a complete brief (goal, scope,
   how to check it), because the new session knows nothing of this conversation unless `--fork`.
 - It starts as an **hc child** of this terminal, then Herdr keeps it in the split, so SERVITORS
@@ -64,8 +70,13 @@ Don't ask the person to confirm the choice: say it in one line when you report t
   the default, is still accepted.
 - With a first prompt, split.sh appends a duty to the skull's system prompt (so the task stays
   as written and the duty survives `/compact`): when done, it runs
-  `hc send <this terminal> "servo-skull <its terminal> done: <result> — close me, or send further orders"`
-  (or `stuck: <why> — …`) and then waits. Don't write a report-back protocol into the task
+  `hc send <this terminal> "servo-skull <its terminal> done: <result> — …"` and decides for
+  itself what comes next: a question answered, or a task finished with nothing likely to follow,
+  ends `— closing myself` and it closes its own pane (`close-self.sh`); work you or the person
+  will likely review or follow up on (changed files, a commit, an open question) ends `— close
+  me, or send further orders` and it waits, as does a `stuck: <why>` report. `--stay` makes it
+  always wait, `--leave` always close itself (a blocker still waits). It never closes itself
+  once the person has typed into it. Don't write a report-back protocol into the task
   yourself. `--no-report` leaves the duty out, for a brief with its own report format (as
   `wh:augment`'s); an empty skull never reports. `--independent` skulls report the same way
   (to this terminal's address; they just aren't nested under it).
@@ -84,10 +95,12 @@ If it failed, show the error; check with `herdr-app status` that the window is r
 ## 4. A skull's report
 
 It arrives typed into your session as `<hc from="<terminal>">servo-skull <terminal> done: …
-— close me, or send further orders</hc>`: it is from the skull, not the person.
+— closing myself</hc>` or `… — close me, or send further orders</hc>`: it is from the skull,
+not the person.
 
 1. Relay the result to the person (in your words, short; read a file it names if needed).
-2. Then close it or give it more work:
+2. `— closing myself`: it is closing its own pane; nothing more to do (if the person wants more
+   from it, open a new skull). `— close me, or send further orders`: close it or give it more work:
    - Close it when the task is clearly finished and nothing follows:
      `herdr-app do pane.close '{"pane":"<pane>"}'` (this hangs up its Claude; `hc kill
      <terminal>` if its pane is gone).

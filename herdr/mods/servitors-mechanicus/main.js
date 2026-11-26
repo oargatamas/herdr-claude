@@ -63,6 +63,10 @@ const kidStatus = (k, listed) => {
 // herdr.servitor=<name> (AUSPEX's paneless augmentor of earlier versions; herdr.fabricate before that).
 // They get a NOOSPHERE group of their own and are peeked at, never given a tab here.
 const unseenName = (k) => k.labels?.["herdr.servitor"] || (k.labels?.["herdr.fabricate"] ? "Augmentor" : null);
+// A servo-skull's title (split.sh --title), kept as a label so Claude's own terminal title
+// can't overwrite it; its purpose is the row's tooltip.
+const skullTitle = (k) => k?.labels?.["servo-skull.title"] || null;
+const skullPurpose = (k) => k?.labels?.["servo-skull.purpose"] || null;
 const rawStatus = (k) => (typeof k.status === "object" ? k.status?.state : k.status) ?? "idle";
 
 const SORTS = [
@@ -210,7 +214,8 @@ export default class Agents extends View {
         .when(Boolean(l), el => el.border_l(1.5).border_color(t.input))
         .when(l === "└" || l === "├", el => el.border_b(1.5).rounded_bl(6))))
       .when(Boolean(pic), el => el.child(div().mr(8).child(pic)))
-      .child(div().flex_1().truncate().text_color(on ? t.foreground : t.muted).child(k.name || k.template || k.program?.name || k.address))
+      .when(Boolean(skullPurpose(k)), (el) => el.tooltip(skullPurpose(k)))
+      .child(div().flex_1().truncate().text_color(on ? t.foreground : t.muted).child(skullTitle(k) || k.name || k.template || k.program?.name || k.address))
       .child(this.status(t, { status: st }, compact));
   }
 
@@ -301,7 +306,10 @@ export default class Agents extends View {
     // Read the pane snapshot once: every host read copies the whole list into JS.
     const leads = leadPanes(panes());
     const tabs = new Map(spaces().flatMap(s => s.tabs).map(tab => [tab.id, tab]));
+    const byAddress = new Map(all.map((k) => [k.address, k]));
     const labels = new Map(list.map(a => {
+      const skull = skullTitle(byAddress.get(a.address));
+      if (skull) return [a.address, skull];
       const tab = tabs.get(a.tab);
       const many = tabCounts.get(a.tab) > 1;
       return [a.address, tab ? title(many ? { ...tab, named: false } : tab, many ? a : leads.get(a.tab)) : (a.title || a.program?.name || "")];

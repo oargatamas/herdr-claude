@@ -51,7 +51,8 @@ skill's base directory), on `sonnet` / `medium`: the rules are given, but each c
 small judgment call.
 
 ```bash
-<base>/../servo-skull/split.sh --model sonnet --effort medium [--folder <worktree>] -- "<brief>"
+<base>/../servo-skull/split.sh --model sonnet --effort medium --stay --title "expurgate <branch>" \
+  --purpose "Purge needless comments from <PR or branch>" [--folder <worktree>] -- "<brief>"
 ```
 
 The brief, filled in (it knows nothing of this conversation); `<attribution>` is the commit
@@ -87,7 +88,8 @@ Your report: the short sha, the files touched, how many comments removed (roughl
 The brief holds backticks and quotes: pass it as one argument without letting the shell expand
 it, e.g. write it to a file in your scratchpad and pass `-- "$(cat <file>)"`. A new worktree
 may show Claude's folder-trust prompt in the skull's pane: tell the person, never answer it.
-`split.sh` appends the report-back duty itself; don't add one. Tell the person the skull is
+`split.sh` appends the report-back duty itself; don't add one. `--stay` keeps it open after its
+report, for the person's answer below. Tell the person the skull is
 out (its pane, model and effort, which branch and folder) and go on; its report arrives
 typed into your session.
 
