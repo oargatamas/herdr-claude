@@ -1,6 +1,6 @@
 ---
 name: servo-skull
-description: Open a new, independent Claude session in a Herdr split pane next to this one, fresh or as a fork of this conversation, optionally in another folder or with a first prompt, on the model and effort that fit its task (haiku / sonnet / opus). Use when the user asks for a "servo", a "servo-skull" or to "send a servo-skull", or to "split", "open a new claude in a split", "split and start claude", "fork this into a split", or wants another Claude beside them to work in by hand. For coordinated workers that report back, use the wh:conclave skill instead. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
+description: Open a new Claude session in a Herdr split pane next to this one (an hc child of this session, so SERVITORS nests it here, but it outlives it), fresh or as a fork of this conversation, optionally in another folder or with a first prompt, on the model and effort that fit its task (haiku / sonnet / opus). Use when the user asks for a "servo", a "servo-skull" or to "send a servo-skull", or to "split", "open a new claude in a split", "split and start claude", "fork this into a split", or wants another Claude beside them to work in by hand. For coordinated workers that report back, use the wh:conclave skill instead. Only works inside a Herdr terminal ($HC_TERMINAL_ID set).
 ---
 
 # Open a Claude session in a split
@@ -35,7 +35,7 @@ Don't ask the person to confirm the choice: say it in one line when you report t
 ## 2. Run
 
 ```sh
-<base>/split.sh [right|down] [--model M --effort E] [--folder DIR] [--fork] [--child] [--profile company|personal] [-- <claude args>]
+<base>/split.sh [right|down] [--model M --effort E] [--folder DIR] [--fork] [--independent] [--profile company|personal] [-- <claude args>]
 ```
 
 (`<base>` is the "Base directory for this skill" shown when it loads: the skill lives in the `wh` plugin, not in `~/.claude/skills`)
@@ -49,20 +49,25 @@ Don't ask the person to confirm the choice: say it in one line when you report t
 | Fork of this conversation | `split.sh --fork --model opus --effort high` |
 
 - It splits **this session's own pane** (found from `$HC_TERMINAL_ID`), not whatever has focus.
-- Claude starts through `claude-ws`, so it gets the workspace's profile (company/personal) and
-  the `herdr.profile` / `herdr.claude-session` labels, like the person's `cmd-shift-<arrow>` keys.
+- Claude starts through `claude-ws`, with this session's profile (company/personal), and gets the
+  `herdr.profile` / `herdr.claude-session` labels, like the person's `cmd-shift-<arrow>` keys.
 - A task given as the first prompt runs straight away; write it as a complete brief (goal, scope,
   how to check it), because the new session knows nothing of this conversation unless `--fork`.
-- `--child` (for skills whose skulls report back, like `wh:augment`) starts Claude as an hc child
-  of this terminal and then has Herdr keep it in the split, so SERVITORS shows it as this
-  session's sub-agent. It outlives this session and types no exit note into it. Leave it off
-  for a session opened for the person: theirs stays independent.
+- It starts as an **hc child** of this terminal, then Herdr keeps it in the split, so SERVITORS
+  shows it under this session. It outlives this session (closing this one doesn't end it) and
+  types no exit note into it; it is still the person's, not a worker. Closing its pane (the
+  pane's close, or `herdr-app do pane.close`) hangs up its Claude, which ends a second later;
+  `hc kill <terminal>` ends one whose pane is gone. `--independent` opens a plain split with no
+  hc parent instead (the profile then comes from the workspace); `--child`, the old name of
+  the default, is still accepted.
 - `--fork` copies the whole conversation; mention that it is costly when it is long.
 - A folder outside a trusted project shows Claude's folder-trust prompt in the new pane.
   Never answer it yourself (no `hc keys`, no forced sends): tell the person which pane needs them.
 
 ## 3. After
 
-The script prints `{"pane": "...", "terminal": "..."}`, or `{"error": ...}` and exits non-zero.
+The script prints `{"pane": "...", "terminal": "..."}`, or `{"error": ...}` and exits non-zero
+(an error with a `terminal` means Claude runs without a pane: `herdr-app do terminal.keep
+--terminal <t> --place right` gives it one, `hc kill <t>` ends it).
 Tell the person the split is open, where, and on which model and effort (with the one-line reason).
 If it failed, show the error; check with `herdr-app status` that the window is running.

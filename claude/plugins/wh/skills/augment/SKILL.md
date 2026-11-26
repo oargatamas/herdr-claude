@@ -104,11 +104,11 @@ For each note:
    choosing the model and effort by its tier table (`<base>/../servo-skull/SKILL.md`): the first
    skull to the `right` of you, the next ones `down`, so they stack beside you.
    ```bash
-   <base>/../servo-skull/split.sh right --child --profile personal --model <m> --effort <e> \
+   <base>/../servo-skull/split.sh right --profile personal --model <m> --effort <e> \
      --folder "$REPO/.claude/worktrees/augment-$ID" -- "$(cat <brief file>)"
    ```
-   `--child` makes it your hc child, so SERVITORS shows it under you (it outlives you, and its
-   exit sends you no note). It prints `{"pane": ..., "terminal": ...}`; add `<id>\t<terminal>\t<pane>\t<note's first line>`
+   It starts as your hc child (split.sh's default), so SERVITORS shows it under you (it outlives
+   you, and its exit sends you no note). It prints `{"pane": ..., "terminal": ...}`; add `<id>\t<terminal>\t<pane>\t<note's first line>`
    to `augment-skulls`. If it fails, drop the claim and the worktree and tell the person.
 
 Unlike a servo-skull opened for the person, these skulls are your workers: you brief them, they
@@ -166,7 +166,9 @@ A skull's report arrives as a message typed into your session (`skull <id> done:
      `$WT`: `- [x] <text> — augmented in <short sha>`, on the note's first line; leave its
      continuation lines as they are. Edit only that line; the file may have changed since you
      read it, so read it again right before the edit.
-  4. Close the skull: `herdr-app do pane.close '{"pane":"<pane>"}'`, then
+  4. Close the skull: `herdr-app do pane.close '{"pane":"<pane>"}'` (this hangs up its Claude,
+     which ends about a second later), then `hc kill <terminal>` in case it is still live (a
+     no-op once it has ended; also the way to end one whose pane is gone), then
      `git -C "$REPO" worktree remove --force <skull worktree>` and
      `git -C "$REPO" branch -D augment-note/<id>`; drop its lines from `augment-skulls` and
      `augment-claimed`.
