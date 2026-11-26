@@ -1,13 +1,15 @@
 ---
 name: scriptorium
-description: Open a markdown file in the SCRIPTORIUM, a floating Herdr window showing its source (read-only, line numbers, markdown colouring) beside its render, with SOURCE / SPLIT / RENDER modes; it follows edits to the file live. Use when the user says "scriptorium" or "data-slate", or asks to open, show, view, preview or render a markdown (.md) file in Herdr / in a floating window, or to see a markdown file's source and render side by side. Only works inside Herdr ($HC_TERMINAL_ID set).
+description: Open a file in the SCRIPTORIUM, a floating Herdr window: a markdown (.md) file shows its source (read-only, line numbers, markdown colouring) beside its render, with SOURCE / SPLIT / RENDER modes; any other file is a simple read-only text window; it follows edits to the file live. Use when the user says "scriptorium" or "data-slate", or asks to open, show, view, preview or render a markdown (.md) or other text file in Herdr / in a floating window, or to see a markdown file's source and render side by side. Only works inside Herdr ($HC_TERMINAL_ID set).
 ---
 
 # Scriptorium
 
-The `scriptorium` Herdr mod shows markdown files in floating windows (data-slates), one per file.
+The `scriptorium` Herdr mod shows files in floating windows (data-slates), one per file. A markdown file (`.md`,
+`.markdown`) gets the render; any other file is a simple text window: its read-only text, with
+line numbers, and no SOURCE / SPLIT / RENDER switch.
 Drag one by its title to move it; drag its right edge, bottom edge or bottom-right corner to
-resize it. It reopens where it was dropped, at the size it was given. A window opens on the
+resize it. It reopens where it was dropped, at the size it was given. A markdown window opens on the
 render, with SOURCE and SPLIT (source beside render) a click away. It re-reads its file every
 second, so edits show while it is open.
 
@@ -19,8 +21,8 @@ can keep it on another display. The script starts it if it isn't running.
 ## Open a file
 
 ```bash
-<base>/open-md.sh <path/to/file.md>          # in the SCRIPTORIUM window
-<base>/open-md.sh --here <path/to/file.md>   # in the person's own Herdr window instead
+<base>/open-md.sh <path/to/file>             # in the SCRIPTORIUM window
+<base>/open-md.sh --here <path/to/file>      # in the person's own Herdr window instead
 ```
 
 `<base>` is the "Base directory for this skill" shown when it loads. Use `--here` only when the
@@ -39,7 +41,7 @@ set up, the script uses the person's window and says so.
 
 ## What it can't do
 
-It stays within Herdr's own rendering (gpui's markdown view). A data-slate can't leave the Herdr
+It stays within Herdr's own rendering (gpui's markdown view, only for markdown files). A data-slate can't leave the Herdr
 window it is in (mods get no OS window of their own); the SCRIPTORIUM window itself can go
 anywhere. A data-slate stretches by its right and bottom edges only (Herdr anchors a window at
 its top left). No HTML/CSS styling, and images or links relative to the file may not resolve. It

@@ -1,17 +1,17 @@
 #!/bin/bash
-# Shows a markdown file in a SCRIPTORIUM window, Herdr's floating markdown viewer (render, source,
-# or both). By default it goes to the SCRIPTORIUM window: a second Herdr window with a home of its
+# Shows a file in a SCRIPTORIUM window, Herdr's floating file viewer: a markdown file (.md,
+# .markdown) with its render, source or both; any other text file as a simple read-only text window. By default it goes to the SCRIPTORIUM window: a second Herdr window with a home of its
 # own (~/.local/share/herdr-claude/scriptorium-window, set up by install.sh), blank but for the
 # data-slates floating in it, so it can sit on another display; started here when it isn't
 # running. --here: in the person's own Herdr window instead.
 # Writes {path, id} to that window's request file (<home>/scriptorium-request), then opens the mod
 # there unless one is open (mod.open toggles); an open scriptorium opens a window of its own for
 # each new file.
-#   open-md.sh [--here] <file.md>
+#   open-md.sh [--here] <file>
 set -eu
 here=0
 [ "${1:-}" = "--here" ] && { here=1; shift; }
-f="${1:?usage: open-md.sh [--here] <markdown file>}"
+f="${1:?usage: open-md.sh [--here] <file>}"
 [ -f "$f" ] || { echo "no such file: $f" >&2; exit 1; }
 abs="$(cd "$(dirname "$f")" && pwd -P)/$(basename "$f")"
 command -v herdr-app >/dev/null || { echo "herdr-app isn't on PATH: the scriptorium needs Herdr" >&2; exit 1; }
