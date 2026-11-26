@@ -1,6 +1,8 @@
 // SCRIPTORIUM: floating windows, each showing one file. A markdown file (.md, .markdown) shows its
 // render, or its source (read-only, with line numbers and markdown colouring), or both side by
-// side; any other file is a simple text window: just its read-only text (plain, no render). Opened by the
+// side; a dotenv file (.env, prod.env) is a text window with shell colouring (comments, keys, "=",
+// quoted values, export, ${VAR}); any other file is a simple text window: just its read-only text
+// (plain, no render). Dotenv files hold secrets: they are only read and shown, never copied. Opened by the
 // wh:scriptorium skill (`open-md.sh <file>`), which writes {path, id} to this Herdr home's REQUEST
 // file and, when no scriptorium is open, runs `mod.open scriptorium` (mod.open takes no props, so
 // the path goes through that file). The copy mod.open makes is only a launcher: it measures the
@@ -32,6 +34,10 @@ const EVERY = 1000;
 const renderSize = () => { const n = Number(settings()?.font_size); return n > 0 ? n : 13; };
 // Only markdown files get the render (and the SOURCE / SPLIT / RENDER switch).
 const isMarkdown = (path) => /\.(md|markdown)$/i.test(path ?? "");
+// Dotenv files: the basename is ".env" or ends in ".env" (prod.env); .env.local and the like stay plain.
+// They get the editor's shell language, which colours them the way a dotenv file reads.
+const isDotenv = (path) => /(^|\/)[^/]*\.env$/i.test(path ?? "");
+const languageFor = (path) => (isMarkdown(path) ? "markdown" : isDotenv(path) ? "bash" : null);
 const MODES = [["source", "SOURCE"], ["split", "SPLIT"], ["render", "RENDER"]];
 // Sizes: per file, the default one (measured by the launcher), and the limits of a drag.
 const SIZES = "scriptorium.sizes", ROOM = "scriptorium.room", KEEP_SIZES = 40;
@@ -71,9 +77,9 @@ export default class Scriptorium extends View {
     this.size = sizeFor(this.path);
     this.drag = null; // while resizing: { edge: "e" | "s" | "se", x, y, w, h } at the press
     this.text = null; // null: not read yet; false: unreadable
-    this.md = isMarkdown(this.path); // other files: plain read-only text, no render
+    this.md = isMarkdown(this.path); // other files: read-only text (.env coloured), no render
     this.mode = this.md ? "render" : "source"; // markdown opens on the render; SOURCE / SPLIT last while it's open
-    this.source = EditorState.new({ ...(this.md ? { language: "markdown" } : {}), readonly: true, soft_wrap: true, folding: false, value: "" });
+    this.source = EditorState.new({ ...(languageFor(this.path) ? { language: languageFor(this.path) } : {}), readonly: true, soft_wrap: true, folding: false, value: "" });
     // The window with the keyboard closes on Esc: a press anywhere in it gives it the keyboard
     // (the source keeps it for itself, and its Esc comes up to the window too), and a new one has it.
     this.handle = cx.focus_handle();
@@ -191,7 +197,7 @@ export default class Scriptorium extends View {
       .child(`The machine spirit cannot read ${where}.`);
     else if (this.text == null) body = div().p(16).text_color(t.dim).text_size(12).child("Retrieving the data-slate…");
     else {
-      const src = pane(this.md ? "◇ SOURCE" : "◇ TEXT", Editor.new(this.source).size_full(), stopOnly);
+      const src = pane(this.md ? "◇ SOURCE" : isDotenv(this.path) ? "◇ DOTENV" : "◇ TEXT", Editor.new(this.source).size_full(), stopOnly);
       if (!this.md) body = src;
       else {
       const rendered = pane("◆ RENDER", div().id("render-scroll").size_full().px(16).py(10).text_size(renderSize()).overflow_y_scrollbar()
