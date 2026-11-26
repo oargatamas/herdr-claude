@@ -1,8 +1,8 @@
 // The keybind list (Herdr's prefix+?), grouped, filterable by typing.
 // Reads keys.json through keys(); edit keys.json to change any of them.
-// A second tab, SKILLS, lists the Claude skills in the herdr-claude repository
-// (the wh plugin: claude/plugins/wh/skills/*/SKILL.md, name and description) and whether the
-// plugin is installed.
+// A second tab, SKILLS, lists the Claude skills of the wh plugin (name and description) as
+// Claude loaded them: the marketplace copy install.sh made (~/.local/share/herdr-claude/marketplace),
+// else the recorded clone, else ~/projects/herdr-claude; and whether the plugin is installed.
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
@@ -47,22 +47,33 @@ function label(action, keys = "") {
   return arg ? `${words} ${arg}` : words;
 }
 
-// The repo's skills: [{ name, description, installed }], read from the clone install.sh recorded.
+// The wh plugin's skills: [{ name, description, installed }], read from the marketplace copy
+// install.sh made (what Claude loaded, whatever branch was installed), else the recorded clone,
+// else ~/projects/herdr-claude. `dir` is the folder read.
 async function repoSkills() {
-  const repo = ((await readTextFile(`${home()}/.local/share/herdr-claude/repo`).catch(() => null)) ?? `${home()}/projects/herdr-claude`).trim();
-  const dir0 = `${repo}/claude/plugins/wh/skills`;
-  const ls = await exec("ls", [dir0]).catch(() => null);
-  if (!ls || ls.code !== 0) return { repo, skills: [] };
-  const plugins = (await readTextFile(`${home()}/.claude/plugins/installed_plugins.json`).catch(() => null)) ?? "";
-  const installed = plugins.includes('"wh@herdr-claude"');
-  const dirs = ls.stdout.split("\n").map((x) => x.trim()).filter(Boolean);
+  const share = `${home()}/.local/share/herdr-claude`;
+  const clone = ((await readTextFile(`${share}/repo`).catch(() => null)) ?? `${home()}/projects/herdr-claude`).trim();
+  const candidates = [`${share}/marketplace`, clone, `${home()}/projects/herdr-claude`].map((r) => `${r}/claude/plugins/wh/skills`);
+  let dir0 = candidates[0];
+  let dirs = [];
+  for (const c of candidates) {
+    const ls = await exec("ls", [c]).catch(() => null);
+    const found = ls && ls.code === 0 ? ls.stdout.split("\n").map((x) => x.trim()).filter(Boolean) : [];
+    if (found.length) { dir0 = c; dirs = found; break; }
+  }
+  if (!dirs.length) return { dir: candidates[0], skills: [] };
+  let installed = false;
+  for (const profile of [".claude", ".claude-personal"]) {
+    const plugins = (await readTextFile(`${home()}/${profile}/plugins/installed_plugins.json`).catch(() => null)) ?? "";
+    if (plugins.includes('"wh@herdr-claude"')) installed = true;
+  }
   const skills = await Promise.all(dirs.map(async (dir) => {
     const text = (await readTextFile(`${dir0}/${dir}/SKILL.md`).catch(() => null)) ?? "";
     const front = text.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
     const field = (k) => front.match(new RegExp(`^${k}:\\s*(.*)$`, "m"))?.[1]?.trim() ?? "";
     return { name: field("name") || dir, description: field("description"), installed };
   }));
-  return { repo, skills };
+  return { dir: dir0, skills };
 }
 
 const TABS = [["keys", "Keybinds"], ["skills", "Skills"]];
@@ -76,9 +87,9 @@ export default class Help extends View {
     cx.timer.after(600, () => this.input.focus());
     this.handle = cx.focus_handle();
     this.tab = "keys";
-    this.skills = null; // { repo, skills } once read
+    this.skills = null; // { dir, skills } once read
     if (checking()) return;
-    cx.spawn(async (cx) => { this.skills = await repoSkills().catch(() => ({ repo: "", skills: [] })); cx.notify(); });
+    cx.spawn(async (cx) => { this.skills = await repoSkills().catch(() => ({ dir: "", skills: [] })); cx.notify(); });
   }
 
   setTab(tab, cx) {
@@ -90,7 +101,7 @@ export default class Help extends View {
   skillRows(t, f) {
     if (!this.skills) return [div().px(8).text_color(t.dim).child("Reading the skills…")];
     const shown = this.skills.skills.filter((s) => !f || s.name.toLowerCase().includes(f) || s.description.toLowerCase().includes(f));
-    if (!shown.length) return [div().px(8).text_color(t.dim).child(this.skills.skills.length ? "No skill matches." : `No skills found in ${this.skills.repo}/claude/plugins/wh/skills.`)];
+    if (!shown.length) return [div().px(8).text_color(t.dim).child(this.skills.skills.length ? "No skill matches." : `No skills found in ${this.skills.dir}.`)];
     return shown.map((s) =>
       v_flex().id(`skill-${s.name}`).px(8).py(6).gap(3).rounded(7)
         .child(h_flex().gap(8).items_center()
