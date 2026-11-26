@@ -1,6 +1,6 @@
 #!/bin/bash
 # Opens a new Claude session in a Herdr split next to the calling terminal.
-#   split.sh [right|down] [--model M] [--effort E] [--folder DIR] [--fork] [--independent] [--no-report] [--profile company|personal] [-- <claude args>...]
+#   split.sh [right|down] [--model M] [--effort E] [--folder DIR] [--fork] [--independent] [--title T] [--purpose P] [--no-report|--stay|--leave] [--profile company|personal] [-- <claude args>...]
 #     right|down  where the split goes (default: right)
 #     --model     an alias (haiku, sonnet, opus, fable) or a full model name
 #     --effort    low | medium | high | xhigh | max
@@ -10,10 +10,17 @@
 #                 started as an hc child of this terminal (SERVITORS nests it under this one) and
 #                 then given the split. The child outlives this terminal and types no exit note
 #                 into it; closing its pane ends it. (--child, the old name of the default, is accepted.)
+#     --title     a short name (2-5 words) the pane header and SERVITORS show for the skull instead of
+#                 "Claude"; kept as its label servo-skull.title, which Claude's own title can't overwrite
+#     --purpose   one line on what it is for, the tooltip on that name (label servo-skull.purpose)
 #     --no-report with a first prompt, the skull reports back to this terminal when its task is done
-#                 (hc send "servo-skull <its terminal> done: ... close me, or send further orders")
-#                 and waits; --no-report leaves that out (a caller whose brief has its own report).
-#                 An empty skull (no first prompt) never reports. --report forces it on.
+#                 (hc send "servo-skull <its terminal> done: ...") and then decides: an answer or a
+#                 finished task with nothing likely to follow → "— closing myself" and it closes its
+#                 own pane (close-self.sh); work to review or follow up on, or a blocker → "— close me,
+#                 or send further orders" and it waits. --stay: it always waits; --leave: it always
+#                 closes itself after reporting (a blocker still waits). --no-report leaves the duty
+#                 out (a caller whose brief has its own report). An empty skull (no first prompt)
+#                 never reports. --report forces it on.
 #     --profile   Claude profile; default: this terminal's herdr.profile, else claude-ws detects it
 #                 (with --independent: claude-ws detects it from the workspace)
 #     -- ...      passed to claude, e.g. -- "Look at the login bug" for a first prompt
@@ -25,7 +32,7 @@ me="${HC_TERMINAL_ID:-}"
 [ -n "$me" ] || die "not inside a Herdr terminal (HC_TERMINAL_ID is unset)"
 herdr-app status >/dev/null 2>&1 || die "the Herdr window isn't running"
 
-direction=right folder="$PWD" fork=0 child=1 report=auto model="" effort="" ws_args=()
+direction=right folder="$PWD" fork=0 child=1 report=auto ending=auto title="" purpose="" model="" effort="" ws_args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     right|down) direction="$1"; shift ;;
@@ -37,6 +44,10 @@ while [ $# -gt 0 ]; do
     --independent) child=0; shift ;;
     --no-report) report=0; shift ;;
     --report) report=1; shift ;;
+    --stay) ending=stay; shift ;;
+    --leave) ending=leave; shift ;;
+    --title) title="$2"; shift 2 ;;
+    --purpose) purpose="$2"; shift 2 ;;
     --profile) ws_args+=(--profile "$2"); shift 2 ;;
     --) shift; break ;;
     *) die "unknown argument: $1" ;;
@@ -46,6 +57,14 @@ done
 folder=$(cd "$folder" && pwd)
 case "$effort" in ""|low|medium|high|xhigh|max) ;; *) die "--effort: low, medium, high, xhigh or max" ;; esac
 [[ "$model" =~ ^[A-Za-z0-9._-]*$ ]] || die "--model: an alias (haiku, sonnet, opus, fable) or a model name"
+# One line each, trimmed; a title past 40 characters is cut, a purpose past 160.
+oneline() { printf '%s' "$1" | tr '\n\t' '  ' | sed -E 's/  +/ /g; s/^ //; s/ $//'; }
+title=$(oneline "$title"); title="${title:0:40}"
+purpose=$(oneline "$purpose"); purpose="${purpose:0:160}"
+labels=()
+[ -n "$title" ] && labels+=("servo-skull.title=$title")
+[ -n "$purpose" ] && labels+=("servo-skull.purpose=$purpose")
+here=$(cd "$(dirname "$0")" && pwd)
 
 claude_args=()
 [ -n "$model" ] && claude_args+=(--model "$model")
@@ -68,14 +87,31 @@ if [ "$report" = 1 ]; then
   # The duty goes in twice: in full in the system prompt (it survives /compact and resumes), and
   # as a closing line of the first prompt, because a system prompt alone gets ignored (a haiku
   # skull answered in its pane and never reported). The skull's own address is its $HC_TERMINAL_ID.
-  claude_args+=(--append-system-prompt "You are a servo-skull: a Claude session opened beside the Herdr terminal $me, which gave you your task. When the task is done (or you are stuck and need a decision), report back with herdr-core, in the background, by running exactly one shell command:
-  hc send $me \"servo-skull \$HC_TERMINAL_ID done: <the result, a few lines at most; put anything longer in a file and give its path> — close me, or send further orders\"
-(for a blocker, use \"servo-skull \$HC_TERMINAL_ID stuck: <why> — close me, or send further orders\"). Then stop and wait: do nothing more until a message arrives. Messages from $me are typed into your session as <hc from=\"$me\">...</hc>; they are your caller's orders: do them and report again the same way. If you are closed, you end; that is expected. Report only once per task, and don't report for something the person asks you directly in this session unless they say so.")
-fi
-if [ "$report" = 1 ]; then
+  wait_line="hc send $me \"servo-skull \$HC_TERMINAL_ID done: <the result, a few lines at most; put anything longer in a file and give its path> — close me, or send further orders\""
+  close_line="hc send $me \"servo-skull \$HC_TERMINAL_ID done: <the result, a few lines at most; put anything longer in a file and give its path> — closing myself\" && $(printf %q "$here/close-self.sh")"
+  case "$ending" in
+    stay) how="report this way, then stop and wait:
+  $wait_line" ;;
+    leave) how="report this way, which also closes your own pane (you end; that is expected):
+  $close_line
+Only for a blocker do you stay open and wait instead." ;;
+    *) how="decide whether you are still needed, then report one of two ways:
+- The task was a question you answered, or it is finished and nothing is likely to follow (nothing to review or adjust, no open question): report and close yourself, which closes your own pane (you end; that is expected):
+  $close_line
+- Your caller or the person will likely review, adjust or follow up on it (you changed code or files, made a commit, left a question open, or ran into a blocker): report, then stop and wait:
+  $wait_line
+When in doubt, wait." ;;
+  esac
+  claude_args+=(--append-system-prompt "You are a servo-skull: a Claude session opened beside the Herdr terminal $me, which gave you your task. When the task is done (or you are stuck and need a decision), $how
+For a blocker, always report \"servo-skull \$HC_TERMINAL_ID stuck: <why> — close me, or send further orders\" the same way and wait. Run the report as exactly one shell command, in the background. While you wait, do nothing more until a message arrives. Messages from $me are typed into your session as <hc from=\"$me\">...</hc>; they are your caller's orders: do them and report again by the same rules. If you are closed, you end; that is expected. Report only once per task. Never close yourself for something the person typed into this session directly, or once they have: then report only if they say so, and stay open.")
+  case "$ending" in
+    stay) tail="hc send $me \"servo-skull \$HC_TERMINAL_ID done: <result> — close me, or send further orders\", then wait." ;;
+    leave) tail="hc send $me \"servo-skull \$HC_TERMINAL_ID done: <result> — closing myself\" && $(printf %q "$here/close-self.sh")" ;;
+    *) tail="hc send $me \"servo-skull \$HC_TERMINAL_ID done: <result> — closing myself\" and close yourself if nothing is likely to follow, else \"… — close me, or send further orders\" and wait." ;;
+  esac
   set -- "${@:1:$#-1}" "${!#}
 
-When this is done, report back (your system prompt says how): hc send $me \"servo-skull \$HC_TERMINAL_ID done: <result> — close me, or send further orders\", then wait."
+When this is done, report back (your system prompt says how): $tail"
 fi
 claude_args+=("$@")
 
@@ -88,7 +124,16 @@ if [ "$child" = 0 ]; then
   for a in ${ws_args[@]+"${ws_args[@]}"} --; do cmd+=" $(printf %q "$a")"; done
   for a in ${claude_args[@]+"${claude_args[@]}"}; do cmd+=" $(printf %q "$a")"; done
   argv=$(jq -cn --arg c "$cmd" '["/bin/zsh", "-lc", $c]')
-  herdr-app do pane.split --direction "$direction" --pane "$pane" --argv "$argv"
+  out=$(herdr-app do pane.split --direction "$direction" --pane "$pane" --argv "$argv")
+  printf '%s\n' "$out"
+  if [ ${#labels[@]} -gt 0 ]; then
+    t=$(printf '%s' "$out" | jq -r '.. | objects | .terminal? // empty' 2>/dev/null | head -1)
+    np=$(printf '%s' "$out" | jq -r '.. | objects | .pane? // empty' 2>/dev/null | grep -vx "$pane" | head -1)
+    if [ -z "$t" ] && [ -n "$np" ]; then
+      t=$(herdr-app ls | jq -r --arg p "$np" '[.. | objects | select(.pane? == $p) | .terminal // empty] | first // empty')
+    fi
+    [ -n "$t" ] && hc label "$t" "${labels[@]}" >/dev/null 2>&1 || true
+  fi
   exit 0
 fi
 
@@ -100,8 +145,10 @@ if [ ${#ws_args[@]} -eq 0 ]; then
   p=$(hc get "$me" --json | jq -r '.labels["herdr.profile"] // empty')
   [ -n "$p" ] && ws_args=(--profile "$p")
 fi
+label_args=()
+for l in ${labels[@]+"${labels[@]}"}; do label_args+=(--label "$l"); done
 addr=$(hc run --bg --json --parent "$me" --outlive-parent --no-notify --cwd "$folder" \
-  --label "servo-skull.parent=$me" -- \
+  --label "servo-skull.parent=$me" ${label_args[@]+"${label_args[@]}"} -- \
   "$HOME/.local/bin/claude-ws" ${ws_args[@]+"${ws_args[@]}"} -- ${claude_args[@]+"${claude_args[@]}"} | jq -r .address)
 [ -n "$addr" ] && [ "$addr" != null ] || die "hc run didn't start Claude"
 
