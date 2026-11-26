@@ -1,16 +1,17 @@
 #!/bin/bash
 # Opens a new Claude session in a Herdr split next to the calling terminal.
-#   split.sh [right|down] [--model M] [--effort E] [--folder DIR] [--fork] [--child] [--profile company|personal] [-- <claude args>...]
+#   split.sh [right|down] [--model M] [--effort E] [--folder DIR] [--fork] [--independent] [--profile company|personal] [-- <claude args>...]
 #     right|down  where the split goes (default: right)
 #     --model     an alias (haiku, sonnet, opus, fable) or a full model name
 #     --effort    low | medium | high | xhigh | max
 #     --folder    folder Claude starts in (default: the current directory)
 #     --fork      resume this terminal's Claude conversation as a fork (--resume <id> --fork-session)
-#     --child     start it as an hc child of this terminal (SERVITORS nests it under this one) and
-#                 then give it the split; for workers that report back (wh:augment's skulls).
-#                 It outlives this terminal and types no exit note into it.
-#     --profile   Claude profile; default: claude-ws detects it from the workspace
-#                 (with --child: this terminal's herdr.profile, else claude-ws detects it)
+#     --independent  a plain split with no hc parent (pane.split), instead of the default: Claude
+#                 started as an hc child of this terminal (SERVITORS nests it under this one) and
+#                 then given the split. The child outlives this terminal and types no exit note
+#                 into it; closing its pane ends it. (--child, the old name of the default, is accepted.)
+#     --profile   Claude profile; default: this terminal's herdr.profile, else claude-ws detects it
+#                 (with --independent: claude-ws detects it from the workspace)
 #     -- ...      passed to claude, e.g. -- "Look at the login bug" for a first prompt
 # Prints {"pane": ..., "terminal": ...} on success.
 set -euo pipefail
@@ -20,7 +21,7 @@ me="${HC_TERMINAL_ID:-}"
 [ -n "$me" ] || die "not inside a Herdr terminal (HC_TERMINAL_ID is unset)"
 herdr-app status >/dev/null 2>&1 || die "the Herdr window isn't running"
 
-direction=right folder="$PWD" fork=0 child=0 model="" effort="" ws_args=()
+direction=right folder="$PWD" fork=0 child=1 model="" effort="" ws_args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     right|down) direction="$1"; shift ;;
@@ -29,6 +30,7 @@ while [ $# -gt 0 ]; do
     --folder) folder="$2"; shift 2 ;;
     --fork) fork=1; shift ;;
     --child) child=1; shift ;;
+    --independent) child=0; shift ;;
     --profile) ws_args+=(--profile "$2"); shift 2 ;;
     --) shift; break ;;
     *) die "unknown argument: $1" ;;
@@ -62,9 +64,9 @@ if [ "$child" = 0 ]; then
   exit 0
 fi
 
-# --child: a terminal from pane.split has no hc parent, and hc sets one only at start. So start
+# The child (default): a terminal from pane.split has no hc parent, and hc sets one only at start. So start
 # Claude with hc run (parent: this terminal), then have Herdr keep it in a split beside this pane,
-# as hc-worker's place_split does. No herdr.* labels at start: a tab label would make a column.
+# as hc-worker's place_split does. Closing that pane hangs up the terminal (Claude ends). No herdr.* labels at start: a tab label would make a column.
 # claude-ws can't detect the profile before Herdr labels it, so pass this terminal's.
 if [ ${#ws_args[@]} -eq 0 ]; then
   p=$(hc get "$me" --json | jq -r '.labels["herdr.profile"] // empty')
