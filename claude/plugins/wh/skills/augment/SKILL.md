@@ -104,11 +104,11 @@ For each note:
    choosing the model and effort by its tier table (`<base>/../servo-skull/SKILL.md`): the first
    skull to the `right` of you, the next ones `down`, so they stack beside you.
    ```bash
-   <base>/../servo-skull/split.sh right --profile personal --model <m> --effort <e> \
+   <base>/../servo-skull/split.sh right --profile personal --no-report --model <m> --effort <e> \
      --folder "$REPO/.claude/worktrees/augment-$ID" -- "$(cat <brief file>)"
    ```
    It starts as your hc child (split.sh's default), so SERVITORS shows it under you (it outlives
-   you, and its exit sends you no note). It prints `{"pane": ..., "terminal": ...}`; add `<id>\t<terminal>\t<pane>\t<note's first line>`
+   you, and its exit sends you no note); `--no-report` because the brief has its own report. It prints `{"pane": ..., "terminal": ...}`; add `<id>\t<terminal>\t<pane>\t<note's first line>`
    to `augment-skulls`. If it fails, drop the claim and the worktree and tell the person.
 
 Unlike a servo-skull opened for the person, these skulls are your workers: you brief them, they
