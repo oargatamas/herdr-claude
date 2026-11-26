@@ -3,6 +3,10 @@
 // A second tab, SKILLS, lists the Claude skills of the wh plugin (name and description) as
 // Claude loaded them: the marketplace copy install.sh made (~/.local/share/herdr-claude/marketplace),
 // else the recorded clone, else ~/projects/herdr-claude; and whether the plugin is installed.
+// Tab / Shift-Tab switch the two tabs. They are bound to our own actions, not read in on_key_down:
+// the filter Input binds Tab itself (input::IndentInline) and Herdr's root binds it to focus-next,
+// and a bound action takes the key before any key_down handler hears it. Ours are added later and
+// sit in the Input's context under ours, so they win only inside this dialog.
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
@@ -77,6 +81,11 @@ async function repoSkills() {
 }
 
 const TABS = [["keys", "Keybinds"], ["skills", "Skills"]];
+const TAB_KEYS = ["HelpPlus", "HelpPlus > Input"].flatMap((context) => [
+  { keystroke: "tab", action: "help_plus::NextTab", context },
+  { keystroke: "shift-tab", action: "help_plus::PrevTab", context },
+]);
+let tabKeysBound = false; // the keymap is the app's: install once per load, not per opening
 
 export default class Help extends View {
   init(_props, cx) {
@@ -86,10 +95,16 @@ export default class Help extends View {
     this.input.focus();
     cx.timer.after(600, () => this.input.focus());
     this.handle = cx.focus_handle();
+    if (!tabKeysBound) { cx.bind_keys(TAB_KEYS); tabKeysBound = true; }
     this.tab = "keys";
     this.skills = null; // { dir, skills } once read
     if (checking()) return;
     cx.spawn(async (cx) => { this.skills = await repoSkills().catch(() => ({ dir: "", skills: [] })); cx.notify(); });
+  }
+
+  stepTab(by, cx) {
+    const i = TABS.findIndex(([id]) => id === this.tab);
+    this.setTab(TABS[(i + by + TABS.length) % TABS.length][0], cx);
   }
 
   setTab(tab, cx) {
@@ -121,11 +136,11 @@ export default class Help extends View {
     }).filter(([, rows]) => rows.length > 0);
     return v_flex()
       .id("help")
+      .key_context("HelpPlus")
       .track_focus(this.handle)
-      .on_key_down((e, cx) => {
-        if (e.key === "escape") return closeOverlay(props().overlay);
-        if (e.key === "tab") { cx.stop_propagation(); this.setTab(this.tab === "keys" ? "skills" : "keys", cx); }
-      })
+      .on_action("help_plus::NextTab", (_e, cx) => this.stepTab(1, cx))
+      .on_action("help_plus::PrevTab", (_e, cx) => this.stepTab(-1, cx))
+      .on_key_down((e) => { if (e.key === "escape") closeOverlay(props().overlay); })
       .size_full()
       .min_h(0)
       .p(18)
