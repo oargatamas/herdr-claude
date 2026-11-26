@@ -24,7 +24,7 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
 ### Notes for Claude when installing
 
 - Read `install.sh` before running it. It only writes: `~/.local/bin/{claude-ws,hc-worker}`,
-  `~/.claude/{statusline-account.sh,herdr-profile-label.sh}`, the `wh` Claude plugin (skills `wh:conclave`, `wh:servo-skull`, `wh:reconsecrate`, `wh:augment`, `wh:petition`, `wh:scriptorium`, from a local marketplace copied to `~/.local/share/herdr-claude/marketplace`), a
+  `~/.claude/{statusline-account.sh,herdr-profile-label.sh}`, the `wh` Claude plugin (skills `wh:conclave`, `wh:servo-skull`, `wh:reconsecrate`, `wh:augment`, `wh:petition`, `wh:scriptorium`, `wh:expurgate`, from a local marketplace copied to `~/.local/share/herdr-claude/marketplace`), a
   marked block in each profile's `CLAUDE.md`, merged entries in each profile's `settings.json`,
   and its own mods, layout and keys under `~/.config/herdr-app`, plus the SCRIPTORIUM window's
   Herdr home in `~/.local/share/herdr-claude/scriptorium-window`. Backups:
@@ -72,6 +72,10 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
 - **`wh:servo-skull` skill** ("servo", "servo-skull" or "split"): "open a Claude in a split" → one Claude beside you (SERVITORS shows it under your session, but it outlives it; closing its pane ends it),
   fresh or a fork of this conversation, on the model and effort that fit; yours to work with. Given a task, it reports the result back
   to the calling Claude (`hc send`, "servo-skull <terminal> done: … — close me, or send further orders") and waits, and that Claude relays it and closes it or sends more orders.
+- **`wh:expurgate` skill** ("expurgate", "purge the heresy" or "clean up the comments in this PR"): finds the PR (the branch's open PR,
+  a given number or branch, else the branch against its base) and sends a servo-skull (`sonnet`/`medium`) to remove the comments its
+  changes add that say nothing (restating the code, narrating the change, debug leftovers, commented-out code), keeping the why, warnings,
+  API docs, directives and referenced TODOs; it commits once without pushing and reports back, and the caller asks whether to push and close it.
 - **`wh:reconsecrate` skill**: "update herdr-claude" → local changes in the clone set aside
   (stash / backup branch), reset to `origin/main`, `install.sh` run again.
 - **`CLAUDE.md` block**: every session knows it runs in Herdr and about these commands.
@@ -157,6 +161,7 @@ sidebar.
 | `claude/plugins/wh/skills/reconsecrate/` | Update skill: resets this clone to `origin/main` (local work kept in a stash / backup branch) and runs `install.sh` |
 | `claude/plugins/wh/skills/augment/` | Watches the AUGMENTATIONS notes (`augment-watch.sh`), sends a servo-skull per note (up to 4 at once, worktrees in `<clone>/.claude/worktrees/augment-<id>`, reporting back with `hc send`) and cherry-picks each one's commit onto an `augment/<time>` branch, in a worktree at `~/.local/share/herdr-claude/augment` (takes over an unpublished `litany` one from before the rename) |
 | `claude/plugins/wh/skills/scriptorium/` | Opens a file in the scriptorium mod (`open-md.sh [--here] <file>`: in the SCRIPTORIUM window, started with `HERDR_APP_HOME=~/.local/share/herdr-claude/scriptorium-window herdr-app` when it isn't running and switched to its `scriptorium` layout, or with `--here` in your window; writes `{path, id}` to that home's `scriptorium-request`, then `mod.open scriptorium` unless one is open, which then opens a window for the file) |
+| `claude/plugins/wh/skills/expurgate/` | Comment cleanup for a PR: works out the PR and its base, then sends a servo-skull (`../servo-skull/split.sh`) with the brief; it works on the branch checked out here (clean tree required) or in a worktree at `<repo>/.claude/worktrees/expurgate-<branch>` for another branch, commits once, doesn't push |
 | `claude/plugins/wh/skills/petition/` | Publishes the augment branch: push, PR to `main` with one line per note, then clears the augment state |
 | `herdr/mods/claude-space/` | The `cmd-shift-n` form |
 | `herdr/mods/claude-fork*/` | Fork into a tab, or a split per direction (a shortcut can't pass arguments to a mod) |
