@@ -64,7 +64,7 @@ say "Claude Code hook and status-line scripts → $MAIN"
 mkdir -p "$MAIN"
 for f in statusline-account.sh herdr-profile-label.sh; do install -m 0755 "$REPO/claude/$f" "$HOME/.claude/$f"; ok "$f"; done
 
-say "Skills: the wh plugin (wh:conclave, wh:servo-skull, wh:reconsecrate, wh:augment, wh:petition, wh:scriptorium)"
+say "Skills: the wh plugin (wh:conclave, wh:servo-skull, wh:reconsecrate, wh:augment, wh:petition, wh:scriptorium, wh:expurgate)"
 # Skills that earlier versions copied into ~/.claude/skills (and linked into other profiles):
 # removed when they are ours, so the plugin's skills don't trigger twice.
 for p in "${PROFILES[@]}"; do
