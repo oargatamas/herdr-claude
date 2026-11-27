@@ -1,5 +1,6 @@
 // Prompt composer: a large text box for writing a long prompt to one agent session,
-// opened from the ✎ button in a pane header (props: { terminal, pane, name, overlay }).
+// opened from the LITANY button in a pane header (props: { terminal, pane, name, overlay }) or with
+// cmd-l (mod.open: no props, so it takes the focused pane's agent session; if that is not an agent, it says so).
 //   Send   (cmd-enter): hc send — pastes the text into the session and presses Enter.
 //   Insert (cmd-i):     puts the text into the session's prompt without sending it
 //                       (via the clipboard, which is restored afterwards).
@@ -7,17 +8,21 @@
 // The draft is kept per terminal (shared "composer.draft.<terminal>") until it is sent.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
-import { props, closeOverlay, run, hc, exec, theme, shared, setShared, window, checking } from "herdr";
+import { props, closeOverlay, run, hc, exec, theme, shared, setShared, window, checking, focused } from "herdr";
 
 const draftKey = (t) => `composer.draft.${t}`;
 
 export default class Composer extends View {
   init(_p, cx) {
     const p = props() ?? {};
-    this.terminal = p.terminal;
+    // Opened by the key: no props, so find the focused agent session ourselves.
+    const f = p.terminal ? null : focused();
+    this.refused = !p.terminal && !(f?.terminal && f.agent);
+    if (!p.terminal && !this.refused) this.target = { terminal: f.terminal, pane: f.pane, name: f.agent };
+    this.terminal = p.terminal ?? this.target?.terminal;
     this.state = TextareaState.new({ placeholder: "Write the prompt… (cmd-enter sends, cmd-i inserts without sending)" });
     this.state.set_soft_wrap(true);
-    this.state.set_value((p.terminal && shared(draftKey(p.terminal))) || "");
+    this.state.set_value((this.terminal && shared(draftKey(this.terminal))) || "");
     this.state.on("change", (_e, cx) => { if (this.terminal) setShared(draftKey(this.terminal), this.state.value()); cx.notify(); });
     this.note = null;
     this.busy = false;
@@ -26,9 +31,11 @@ export default class Composer extends View {
     cx.timer.after(300, () => this.state.focus());
   }
 
+  get info() { return this.target ?? props() ?? {}; }
+
   close(text) {
     if (text !== undefined && this.terminal) setShared(draftKey(this.terminal), text);
-    closeOverlay(props().overlay);
+    closeOverlay(props()?.overlay);
   }
 
   text() { return this.state.value().replace(/\s+$/, ""); }
@@ -55,7 +62,7 @@ export default class Composer extends View {
     cx.spawn(async (cx) => {
       const before = await exec("pbpaste", []).catch(() => null);
       await exec("sh", ["-c", 'printf "%s" "$1" | pbcopy', "sh", text]);
-      const p = props();
+      const p = this.info;
       this.close(text);
       run("pane.focus", p.pane ? { pane: p.pane } : { terminal: p.terminal });
       run("terminal.paste");
@@ -76,7 +83,16 @@ export default class Composer extends View {
   }
 
   render(cx) {
-    const t = theme(), p = props() ?? {};
+    const t = theme(), p = this.info;
+    if (this.refused) return v_flex().size_full().bg(t.popover).border(1).border_color(t.accent)
+      .on_key_down((e) => { if (e.key === "escape") this.close(); })
+      .child(h_flex().h(36).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.input).text_size(12).text_color(t.accent)
+        .child(svg("mods/chrome-mechanicus/square-pen.svg").size(13)).child("LITANY")
+        .child(div().flex_1())
+        .child(div().id("composer-close").px(6).cursor_pointer().text_color(t.dim).hover((el) => el.text_color(t.foreground))
+          .on_click(() => this.close()).child(svg("mods/chrome-mechanicus/x.svg").size(13))))
+      .child(div().flex_1().p(16).text_size(13).text_color(t.blocked)
+        .child("The focused pane is not a Claude (agent) session: focus one, then press cmd-l again. Esc closes."));
     const text = this.state.value();
     const lines = text ? text.split("\n").length : 0;
     const button = (id, label, hint, primary, action) => h_flex().id(id).h(28).px(12).gap(6).items_center().cursor_pointer()

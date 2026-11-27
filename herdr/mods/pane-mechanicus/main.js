@@ -97,7 +97,7 @@ export default class Pane extends View {
       .when(Boolean(p.program?.agent && p.terminal), el => el.child(div().id(`ph-c-${pane}`).flex_none().h(20).px(6).gap(4).flex().items_center()
         .border(1).border_color(t.input).text_size(10.5).text_color(t.muted).cursor_pointer()
         .hover((s) => s.text_color(t.accent).border_color(t.accent))
-        .tooltip("Write a long prompt in a big text box")
+        .tooltip("Write a long prompt in a big text box (cmd-l)")
         .on_click((_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "composer", kind: "dialog", width: 1100, height: 0.75, props: { terminal: p.terminal, pane, name } }); })
         .child(svg("mods/chrome-mechanicus/square-pen.svg").size(12)).child("LITANY")))
       .when(this.hovered, el => el

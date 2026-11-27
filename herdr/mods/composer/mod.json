@@ -1,1 +1,1 @@
-{ "place": "none", "title": "Prompt composer" }
+{ "place": "none", "title": "Prompt composer", "overlay": { "kind": "dialog", "width": 1100, "height": 0.75 } }
