@@ -225,27 +225,16 @@ if [ "$HERDR" = 1 ]; then
     mkdir -p "$H/themes"; cp "$REPO"/herdr/themes/*.json "$H/themes/"; ok "themes: $(ls "$REPO/herdr/themes" | tr '\n' ' ')"
     mkdir -p "$H/backgrounds"; cp "$REPO"/herdr/backgrounds/* "$H/backgrounds/"; ok "backgrounds: $(ls "$REPO/herdr/backgrounds" | tr '\n' ' ')"
 
-    # The SCRIPTORIUM window: a second Herdr window with a home of its own, where wh:scriptorium's
-    # open-md.sh shows data-slates (it starts the window). Its blank layout, the scriptorium mods
-    # (chrome-mechanicus for their icons), the look; sounds off (the person's window has them).
-    # Herdr fills in the rest on its first start. Short path: Herdr's socket lives in it.
-    SH="$HOME/.local/share/herdr-claude/scriptorium-window"
-    say "SCRIPTORIUM window → $SH"
-    mkdir -p "$SH/mods" "$SH/layouts" "$SH/themes" "$SH/backgrounds" "$SH/fonts"
-    for m in "$REPO/herdr/mods/scriptorium" "$REPO/herdr/mods/chrome-mechanicus" "$REPO/herdr/scriptorium-window/mods/scriptorium-desk"; do
-      rm -rf "$SH/mods/$(basename "$m")"; cp -R "$m" "$SH/mods/"
-    done
-    cp "$REPO"/herdr/scriptorium-window/layouts/*.json "$SH/layouts/"
-    cp "$REPO"/herdr/themes/*.json "$SH/themes/"; cp "$REPO"/herdr/backgrounds/* "$SH/backgrounds/"
-    cp "$REPO"/herdr/mods/spaces-profile/fonts/*.ttf "$SH/fonts/"
-    [ -s "$SH/settings.json" ] || echo '{}' > "$SH/settings.json"
-    jq -s '.[0] * .[1]' "$SH/settings.json" "$REPO/herdr/scriptorium-window/settings.json" > "$SH/settings.json.tmp"
-    mv "$SH/settings.json.tmp" "$SH/settings.json"
-    # No first-start welcome there: it isn't a window to set up.
-    [ -s "$SH/shared.json" ] || echo '{}' > "$SH/shared.json"
-    jq '."frame.welcomed" //= "finished"' "$SH/shared.json" > "$SH/shared.json.tmp"
-    mv "$SH/shared.json.tmp" "$SH/shared.json"
-    ok "mods scriptorium, scriptorium-desk; layout scriptorium; sounds off (open-md.sh starts it: HERDR_APP_HOME=$SH herdr-app)"
+    # The scriptorium used to be a floating mod and a second Herdr window: clean up what earlier
+    # installs left (wh:scriptorium now opens files in PyCharm LightEdit).
+    rm -rf "$H/mods/scriptorium" "$H/mods/scriptorium-desk"
+    old="$HOME/.local/share/herdr-claude/scriptorium-window"
+    [ -d "$old" ] && { rm -rf "$old"; ok "removed the old SCRIPTORIUM window home $old"; }
+    oldapp="$HOME/Applications/Scriptorium.app"
+    if [ -d "$oldapp" ] && [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$oldapp/Contents/Info.plist" 2>/dev/null)" = dev.herdr.scriptorium ]; then
+      if pgrep -qf "^$oldapp/Contents/MacOS/" 2>/dev/null; then warn "$oldapp is running: close it, then delete it (the SCRIPTORIUM window is gone)"
+      else rm -rf "$oldapp"; ok "removed the old $oldapp"; fi
+    fi
 
     if [ "$(uname)" = Darwin ]; then
       say "Dock icons"
@@ -288,8 +277,6 @@ if [ "$HERDR" = 1 ]; then
         name=$(basename "$m")
         if herdr-app check "$H/mods/$name" >/dev/null 2>&1; then ok "$name"; else warn "$name failed: herdr-app check $H/mods/$name"; fi
       done
-      if HERDR_APP_HOME="$SH" herdr-app check "$SH/mods/scriptorium-desk" >/dev/null 2>&1; then ok "scriptorium-desk (SCRIPTORIUM window)"
-      else warn "scriptorium-desk failed: HERDR_APP_HOME=$SH herdr-app check $SH/mods/scriptorium-desk"; fi
       sleep 1
       for e in keys layout settings programs; do [ -f "$H/$e.error" ] && warn "Herdr rejected $e: see $H/$e.error"; done
       shown=$(herdr-app status 2>/dev/null | jq -r '.layout // empty' || true)
