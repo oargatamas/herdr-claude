@@ -18,7 +18,7 @@ const CLAUDE = /claude/;
 const ARROW = { left: "left", right: "right", up: "above", down: "below" };
 function claudeLabel(keys, action) {
   const arrow = ARROW[keys.split("-").pop()] ?? "";
-  if (action === "mod.open:claude-space") return "New Claude space: name it, pick Company or Personal";
+  if (action === "mod.open:claude-space") return "New Claude space: name it, pick Company or Personal (first tab: Cogitator <name>)";
   if (action === "mod.open:claude-fork") return "Fork the focused Claude conversation into a new tab";
   if (action.startsWith("mod.open:claude-fork-")) return `Fork the focused Claude conversation into a split ${arrow}`;
   if (action.includes("claude-ws")) return `New Claude session (workspace's profile) in a split ${arrow}`;

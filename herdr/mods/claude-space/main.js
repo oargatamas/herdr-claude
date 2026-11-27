@@ -31,8 +31,9 @@ export default class ClaudeSpace extends View {
     try { localStorage.setItem("profile", this.profile); } catch {}
     this.close_();
     // The sidebar and tab bar show the profile as a badge (spaces-profile, tabs-profile).
-    const args = { argv: profile.argv(), folder: this.folder };
+    // The space keeps the plain name; its first tab (the Claude one) is "Cogitator <name>".
     const name = this.name.trim();
+    const args = { argv: profile.argv(), folder: this.folder, tab: name ? `Cogitator ${name}` : "Cogitator" };
     if (name) args.name = name;
     run("space.new", args);
   }

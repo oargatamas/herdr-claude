@@ -48,7 +48,7 @@ gh repo clone oargatamas/herdr-claude ~/projects/herdr-claude
 
 | Shortcut | What it does |
 |---|---|
-| `cmd-shift-n` | New Claude space: name it, pick Company or Personal |
+| `cmd-shift-n` | New Claude space: name it, pick Company or Personal; its first tab is named "Cogitator <name>" |
 | `cmd-shift-<arrow>` | New Claude session in a split, with the workspace's profile |
 | `cmd-shift-t` | Fork the focused Claude conversation into a new tab |
 | `cmd-ctrl-<arrow>` | Fork the focused Claude conversation into a split |
@@ -166,7 +166,7 @@ sidebar.
 | `claude/plugins/wh/skills/scriptorium/` | Opens a file in the scriptorium mod (`open-md.sh [--here] <file>`: in the SCRIPTORIUM window, started with `HERDR_APP_HOME=~/.local/share/herdr-claude/scriptorium-window herdr-app` when it isn't running and switched to its `scriptorium` layout, or with `--here` in your window; writes `{path, id}` to that home's `scriptorium-request`, then `mod.open scriptorium` unless one is open, which then opens a window for the file; `close-md.sh [--here] <file>... | --all` closes data-slates: writes `{id, at, all, paths}` to the home's `scriptorium-close`, which every open window reads and obeys when its file is named, since `herdr-app` can't close a mod's overlay by key) |
 | `claude/plugins/wh/skills/expurgate/` | Comment cleanup for a PR: works out the PR and its base, then sends a servo-skull (`../servo-skull/split.sh`) with the brief; it works on the branch checked out here (clean tree required) or in a worktree at `<repo>/.claude/worktrees/expurgate-<branch>` for another branch, commits once, doesn't push |
 | `claude/plugins/wh/skills/petition/` | Publishes the augment branch: push, PR to `main` with one line per note, then clears the augment state |
-| `herdr/mods/claude-space/` | The `cmd-shift-n` form |
+| `herdr/mods/claude-space/` | The `cmd-shift-n` form (the first tab is named "Cogitator <name>") |
 | `herdr/mods/claude-fork*/` | Fork into a tab, or a split per direction (a shortcut can't pass arguments to a mod) |
 | `herdr/shared/fork.js` | Copied into every `claude-fork*` mod (mods can't import across folders) |
 | `herdr/mods/spaces-profile/`, `tabs-profile/` | Copies of Herdr's sidebar list and tab bar, with badges |
