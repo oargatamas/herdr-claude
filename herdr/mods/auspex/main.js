@@ -13,7 +13,7 @@
 // Polls only while shown; gh answers are cached per branch and link.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
-import { exec, hc, run, spaces, panes, terminals, focused, layout, theme, window, home, shared, props, openOverlay, closeOverlay, readTextFile, writeTextFile, checking } from "herdr";
+import { exec, hc, run, spaces, panes, terminals, focused, layout, theme, window, home, shared, setShared, props, openOverlay, closeOverlay, readTextFile, writeTextFile, checking } from "herdr";
 
 // Sidebar animations on unless stilled with a click on the brand emblem.
 const motion = () => shared("mechanicus.motion") !== false;
@@ -110,6 +110,8 @@ const LEGACY_AUGMENTORS = ["augmentor", "litany-fabricator"];
 const WATCHER = "augment-watch\\.sh|litany-watch\\.sh";
 const repoFile = () => `${home()}/.local/share/herdr-claude/repo`;
 // AUGMENTATIONS todos: a markdown checklist anyone can also edit by hand.
+const DRAFT_KEY = "todo-draft";
+const DRAFT_BREAK = " ⏎ ";
 const notesFile = () => `${home()}/.local/share/herdr-claude/todos.md`;
 const NOTES_HEAD = "# Herdr + Claude improvement notes\n\nSelf-improvement todos added from AUSPEX (AUGMENTATIONS). Edit freely: lines like `- [ ] text` are the todos; lines indented by two spaces below one continue it.\n\n";
 // A todo is a `- [ ] …` / `- [x] …` line; a multi-line one continues on the lines below it that
@@ -492,21 +494,47 @@ export default class Auspex extends View {
       ? TextareaState.new({ placeholder: "New todo for the mods or Claude… (⌘↵ adds; Enter starts a new line)" })
       : InputState.new({ placeholder: "New todo for the mods or Claude… (Enter adds)" });
     if (this.notesDialog) this.todoInput.set_soft_wrap(true);
-    // The todo being typed is kept (per sidebar / dialog) so a mod reload, e.g. an install while
-    // augmenting, doesn't lose it; it is cleared once added.
-    this.draftKey = `todo-draft:${this.notesDialog ? "dialog" : "sidebar"}`;
-    try { const d = localStorage.getItem(this.draftKey); if (d) this.todoInput.set_value(d); } catch {}
-    this.todoInput.on("change", () => { try { localStorage.setItem(this.draftKey, this.todoInput.value()); } catch {} });
+    // The todo being typed is one draft shared by the sidebar and the dialog (shared state, kept in
+    // localStorage too so a mod reload, e.g. an install while augmenting, doesn't lose it): what is
+    // typed in one shows in the other, live. It is cleared once added. The one-line sidebar field
+    // shows a multi-line draft joined with DRAFT_BREAK in place of each newline, and turns the marker
+    // back into a newline when it is edited, so the further lines are never lost.
+    if (shared(DRAFT_KEY) === undefined) {
+      let d = "";
+      try { d = localStorage.getItem(DRAFT_KEY) || localStorage.getItem("todo-draft:dialog") || localStorage.getItem("todo-draft:sidebar") || "";
+        localStorage.removeItem("todo-draft:dialog"); localStorage.removeItem("todo-draft:sidebar");
+        if (d) localStorage.setItem(DRAFT_KEY, d);
+      } catch {}
+      setShared(DRAFT_KEY, d);
+    }
+    this.draftSync();
+    this.todoInput.on("change", () => {
+      const d = this.draftOf(this.todoInput.value());
+      if (d === (shared(DRAFT_KEY) ?? "")) return;
+      setShared(DRAFT_KEY, d);
+      try { localStorage.setItem(DRAFT_KEY, d); } catch {}
+    });
     if (!this.notesDialog) this.todoInput.on("submit", (_e, cx) => this.addTodo(cx));
     this.fab = null;
     if (checking()) return;
     this.loadNotes(cx);
     this.loadAugmentor(cx);
+    cx.timer.every(400, () => this.draftSync());
     if (this.notesDialog) {
       this.todoInput.focus();
       cx.timer.after(300, () => this.todoInput.focus());
       cx.timer.every(NOTES_EVERY, (cx) => this.loadNotes(cx));
     }
+  }
+
+  // The shared draft as the field holds it, and the field's text as the draft.
+  draftShown(d) { return this.notesDialog ? d : d.replace(/\n/g, DRAFT_BREAK); }
+  draftOf(v) { return this.notesDialog ? v : v.split(DRAFT_BREAK).join("\n"); }
+
+  // Show the shared draft in this field, only when it really differs (so the cursor is left alone).
+  draftSync() {
+    const want = this.draftShown(shared(DRAFT_KEY) ?? "");
+    if (this.todoInput.value() !== want) this.todoInput.set_value(want);
   }
 
   // The augmentor's state: { space, status } of the AUGMENTORIUM (read live in augmentor()), else
@@ -590,10 +618,11 @@ export default class Auspex extends View {
 
   // Add what is typed as a todo (its continuation lines too) and clear the field and its draft.
   addTodo(cx) {
-    const add = todoLines(this.todoInput.value());
+    const add = todoLines(this.draftOf(this.todoInput.value()));
     if (!add) return;
     this.todoInput.set_value("");
-    try { localStorage.removeItem(this.draftKey); } catch {}
+    setShared(DRAFT_KEY, "");
+    try { localStorage.removeItem(DRAFT_KEY); } catch {}
     this.editNotes(cx, (cur) => cur.replace(/\n*$/, "\n") + add);
   }
 
