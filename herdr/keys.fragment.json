@@ -44,6 +44,7 @@
     "cmd-ctrl-right": "mod.open:claude-fork-right",
     "cmd-ctrl-up": "mod.open:claude-fork-up",
     "cmd-ctrl-down": "mod.open:claude-fork-down",
+    "cmd-l": "mod.open:composer",
     "cmd-shift-h": "mod.open:help-plus"
   }
 }
