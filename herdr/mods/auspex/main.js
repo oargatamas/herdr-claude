@@ -111,6 +111,10 @@ const WATCHER = "augment-watch\\.sh|litany-watch\\.sh";
 const repoFile = () => `${home()}/.local/share/herdr-claude/repo`;
 // AUGMENTATIONS todos: a markdown checklist anyone can also edit by hand.
 const DRAFT_KEY = "todo-draft";
+// shift-enter inscribes too. A bound key takes the key before the field sees it (the Textarea
+// binds shift-enter to a new line itself), and a deeper context wins over its own.
+const INSCRIBE_KEYS = [{ keystroke: "shift-enter", action: "auspex::InscribeTodo", context: "AuspexTodo > Input" }];
+let inscribeKeysBound = false; // the keymap is the app's: install once per load, not per view
 const DRAFT_BREAK = " ⏎ ";
 const notesFile = () => `${home()}/.local/share/herdr-claude/todos.md`;
 const NOTES_HEAD = "# Herdr + Claude improvement notes\n\nSelf-improvement todos added from AUSPEX (AUGMENTATIONS). Edit freely: lines like `- [ ] text` are the todos; lines indented by two spaces below one continue it.\n\n";
@@ -490,9 +494,10 @@ export default class Auspex extends View {
     this.notesText = null;
     // The sidebar has a one-line field (Enter adds); the dialog a multi-line box (cmd-enter adds,
     // Enter starts a new line of the same todo).
+    if (!inscribeKeysBound) { cx.bind_keys(INSCRIBE_KEYS); inscribeKeysBound = true; }
     this.todoInput = this.notesDialog
-      ? TextareaState.new({ placeholder: "New todo for the mods or Claude… (⌘↵ adds; Enter starts a new line)" })
-      : InputState.new({ placeholder: "New todo for the mods or Claude… (Enter adds)" });
+      ? TextareaState.new({ placeholder: "New todo for the mods or Claude… (⇧↵ or ⌘↵ adds; Enter starts a new line)" })
+      : InputState.new({ placeholder: "New todo for the mods or Claude… (Enter or ⇧↵ adds)" });
     if (this.notesDialog) this.todoInput.set_soft_wrap(true);
     // The todo being typed is one draft shared by the sidebar and the dialog (shared state, kept in
     // localStorage too so a mod reload, e.g. an install while augmenting, doesn't lose it): what is
@@ -646,17 +651,17 @@ export default class Auspex extends View {
   // The add-a-todo field, as used in the sidebar and the dialog.
   todoField(t, id) {
     if (this.notesDialog)
-      return v_flex().id(id).gap(4)
+      return v_flex().id(id).gap(4).key_context("AuspexTodo").on_action("auspex::InscribeTodo", (_e, cx) => this.addTodo(cx))
         .child(div().h(96).p(6).border(1).border_color(t.input).bg(t.background).cursor_text().text_size(12).text_color(t.foreground)
           .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.todoInput.focus(); })
           .on_key_down((e, cx) => { if (e.keystroke === "cmd-enter" || e.keystroke === "ctrl-enter") { cx.stop_propagation(); this.addTodo(cx); } })
           .child(Textarea.new(this.todoInput).size_full()))
         .child(h_flex().gap(8).items_center()
-          .child(div().flex_1().text_size(10.5).text_color(t.dim).child("⌘↵ adds · Enter: a new line of the same todo"))
+          .child(div().flex_1().text_size(10.5).text_color(t.dim).child("⇧↵ or ⌘↵ adds · Enter: a new line of the same todo"))
           .child(div().id(`${id}-add`).flex_none().px(6).border(1).border_color(t.accent).text_color(t.accent).text_size(10.5)
             .cursor_pointer().hover((el) => el.bg(t.accent).text_color(t.background))
             .on_click((_e, cx) => { cx.stop_propagation(); this.addTodo(cx); }).child("INSCRIBE")));
-    return div().id(id).h(28).px(8).flex().items_center().border(1).border_color(t.input).bg(t.background).cursor_text()
+    return div().id(id).key_context("AuspexTodo").on_action("auspex::InscribeTodo", (_e, cx) => this.addTodo(cx)).h(28).px(8).flex().items_center().border(1).border_color(t.input).bg(t.background).cursor_text()
       .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.todoInput.focus(); })
       .child(Input.new(this.todoInput).w_full().text_size(12).text_color(t.foreground));
   }
