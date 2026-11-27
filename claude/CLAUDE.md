@@ -20,7 +20,7 @@ Custom commands (in `~/.local/bin`):
   splitting work across agents, use the `wh:conclave` skill, which drives it; for one Claude beside you to work
   with by hand, the `wh:servo-skull` skill. The `wh` plugin also has `wh:reconsecrate` (update
   from the repo), `wh:augment` (AUSPEX's AUGMENTATIONS, the self-improvement notes, become commits), `wh:petition` (their PR),
-  `wh:scriptorium` (a file opened in PyCharm LightEdit) and
+  `wh:scriptorium` (a file opened in a JetBrains IDE's LightEdit, else VS Code) and
   `wh:expurgate` (a servo-skull cleans the unnecessary comments out of a PR).
 
 Each Claude terminal carries the labels `herdr.profile` and `herdr.claude-session` (set by a

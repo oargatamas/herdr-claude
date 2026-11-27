@@ -1,18 +1,10 @@
 #!/bin/bash
-# Opens files in PyCharm's LightEdit mode (`pycharm -e <file>`): the lightweight single-file
-# editor, no project opened. Usage: open-file.sh <file>...
+# Opens files as data-slates: in a JetBrains IDE's LightEdit mode (`<ide> -e <file>`: the lightweight
+# single-file editor, no project opened), else in VS Code. Exit 3 when neither is installed.
+# Usage: open-file.sh <file>...
 set -uo pipefail
 
 [ $# -gt 0 ] || { echo "usage: open-file.sh <file>..." >&2; exit 2; }
-
-# The launcher: `pycharm` on PATH, else an installed PyCharm*.app (also JetBrains Toolbox's).
-launcher=$(command -v pycharm 2>/dev/null || true)
-if [ -z "$launcher" ]; then
-  for app in /Applications/PyCharm*.app "$HOME"/Applications/PyCharm*.app "$HOME"/Applications/*/PyCharm*.app; do
-    [ -x "$app/Contents/MacOS/pycharm" ] && { launcher="$app/Contents/MacOS/pycharm"; break; }
-  done
-fi
-[ -n "$launcher" ] || { echo "no PyCharm found: not on PATH, nor in /Applications or ~/Applications" >&2; exit 1; }
 
 rc=0; files=()
 for f in "$@"; do
@@ -20,8 +12,42 @@ for f in "$@"; do
   files+=("$(cd "$(dirname "$f")" && pwd)/$(basename "$f")")
 done
 [ ${#files[@]} -gt 0 ] || exit 1
-# One call for all the files (so they share one IDE), detached: the launcher blocks while it is
-# the one that starts the IDE.
-nohup "$launcher" -e "${files[@]}" >/dev/null 2>&1 &
-printf 'PyCharm LightEdit: %s\n' "${files[@]}"
-exit $rc
+
+# The JetBrains IDEs in order of preference: their launcher on PATH (Toolbox's shell scripts
+# included), then their .app in /Applications or ~/Applications (Toolbox installs there too).
+ides="pycharm:PyCharm idea:IntelliJ?IDEA webstorm:WebStorm rubymine:RubyMine goland:GoLand
+  phpstorm:PhpStorm clion:CLion rider:Rider rustrover:RustRover dataspell:DataSpell datagrip:DataGrip aqua:Aqua"
+launcher=""; name=""
+for e in $ides; do
+  cmd=${e%%:*}; app=${e#*:}
+  if p=$(command -v "$cmd" 2>/dev/null); then launcher=$p; name=${app/\?/ }; break; fi
+  for a in /Applications/$app*.app "$HOME"/Applications/$app*.app "$HOME"/Applications/*/$app*.app; do
+    [ -d "$a" ] || continue
+    exe=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$a/Contents/Info.plist" 2>/dev/null)
+    if [ -n "$exe" ] && [ -x "$a/Contents/MacOS/$exe" ]; then launcher="$a/Contents/MacOS/$exe"; name=$(basename "$a" .app); break 2; fi
+  done
+done
+
+if [ -n "$launcher" ]; then
+  # One call for all the files (so they share one IDE), detached: the launcher blocks while it is
+  # the one that starts the IDE.
+  nohup "$launcher" -e "${files[@]}" >/dev/null 2>&1 &
+  printf '%s LightEdit: %s\n' "$name" "${files[@]}"
+  exit $rc
+fi
+
+# No JetBrains IDE: VS Code (`code` on PATH, else the one inside its .app).
+code=$(command -v code 2>/dev/null || true)
+if [ -z "$code" ]; then
+  for a in "/Applications/Visual Studio Code.app" "$HOME/Applications/Visual Studio Code.app"; do
+    [ -x "$a/Contents/Resources/app/bin/code" ] && { code="$a/Contents/Resources/app/bin/code"; break; }
+  done
+fi
+if [ -n "$code" ]; then
+  "$code" "${files[@]}" >/dev/null 2>&1 &
+  printf 'VS Code: %s\n' "${files[@]}"
+  exit $rc
+fi
+
+echo "No app is registered for the scriptorium: install a JetBrains IDE (PyCharm, IntelliJ IDEA, WebStorm, ...) for LightEdit, or VS Code" >&2
+exit 3

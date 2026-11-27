@@ -6,7 +6,7 @@
     {
       "name": "wh",
       "source": "./claude/plugins/wh",
-      "description": "The Mechanicus skills: conclave, servo-skull, reconsecrate, augment, petition, scriptorium (a file in PyCharm LightEdit) and expurgate."
+      "description": "The Mechanicus skills: conclave, servo-skull, reconsecrate, augment, petition, scriptorium (a file in JetBrains LightEdit, else VS Code) and expurgate."
     }
   ]
 }
