@@ -1,16 +1,25 @@
 // Prompt composer: a large text box for writing a long prompt to one agent session,
 // opened from the LITANY button in a pane header (props: { terminal, pane, name, overlay }) or with
 // cmd-l (mod.open: no props, so it takes the focused pane's agent session; if that is not an agent, it says so).
-//   Send   (cmd-enter): hc send — pastes the text into the session and presses Enter.
+//   Send   (shift-enter, or cmd-enter): hc send — pastes the text into the session and presses Enter.
 //   Insert (cmd-i):     puts the text into the session's prompt without sending it
 //                       (via the clipboard, which is restored afterwards).
 //   Copy:               copies the text to the clipboard.
+// The keys are bound actions in the "Composer > Input" context: the Textarea binds enter-like keys
+// itself (shift-enter is its new line) and a bound key beats on_key_down on a parent.
 // The draft is kept per terminal (shared "composer.draft.<terminal>") until it is sent.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
 import { props, closeOverlay, run, hc, exec, theme, shared, setShared, window, checking, focused } from "herdr";
 
 const draftKey = (t) => `composer.draft.${t}`;
+const LITANY_KEYS = [
+  { keystroke: "shift-enter", action: "composer::Send", context: "Composer > Input" },
+  { keystroke: "cmd-enter", action: "composer::Send", context: "Composer > Input" },
+  { keystroke: "ctrl-enter", action: "composer::Send", context: "Composer > Input" },
+  { keystroke: "cmd-i", action: "composer::Insert", context: "Composer > Input" },
+];
+let litanyKeysBound = false; // the keymap is the app's: install once per load, not per view
 
 export default class Composer extends View {
   init(_p, cx) {
@@ -20,7 +29,8 @@ export default class Composer extends View {
     this.refused = !p.terminal && !(f?.terminal && f.agent);
     if (!p.terminal && !this.refused) this.target = { terminal: f.terminal, pane: f.pane, name: f.agent };
     this.terminal = p.terminal ?? this.target?.terminal;
-    this.state = TextareaState.new({ placeholder: "Write the prompt… (cmd-enter sends, cmd-i inserts without sending)" });
+    if (!litanyKeysBound) { cx.bind_keys(LITANY_KEYS); litanyKeysBound = true; }
+    this.state = TextareaState.new({ placeholder: "Write the prompt… (shift-enter sends, cmd-i inserts without sending)" });
     this.state.set_soft_wrap(true);
     this.state.set_value((this.terminal && shared(draftKey(this.terminal))) || "");
     this.state.on("change", (_e, cx) => { if (this.terminal) setShared(draftKey(this.terminal), this.state.value()); cx.notify(); });
@@ -101,10 +111,9 @@ export default class Composer extends View {
       .hover((el) => el.opacity(0.85)).on_click((_e, cx) => action(cx))
       .child(label).when(Boolean(hint), (el) => el.child(div().text_size(10).opacity(0.7).child(hint)));
     return v_flex().size_full().bg(t.popover).border(1).border_color(t.accent)
-      .on_key_down((e, cx) => {
-        if (e.keystroke === "cmd-enter" || e.keystroke === "ctrl-enter") { cx.stop_propagation(); this.send(cx); }
-        else if (e.keystroke === "cmd-i") { cx.stop_propagation(); this.insert(cx); }
-      })
+      .key_context("Composer")
+      .on_action("composer::Send", (_e, cx) => this.send(cx))
+      .on_action("composer::Insert", (_e, cx) => this.insert(cx))
       .child(h_flex().h(36).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.input).text_size(12).text_color(t.accent)
         .child(svg("mods/chrome-mechanicus/square-pen.svg").size(13))
         .child(`LITANY · ${p.name ?? p.terminal ?? ""}`)
@@ -121,6 +130,6 @@ export default class Composer extends View {
           .child(this.note ?? "Esc closes; the draft is kept until it is sent"))
         .child(button("composer-copy", "Copy", "", false, (cx) => this.copy(cx)))
         .child(button("composer-insert", "Insert", "⌘I", false, (cx) => this.insert(cx)))
-        .child(button("composer-send", this.busy ? "Sending…" : "Send", "⌘↵", true, (cx) => this.send(cx))));
+        .child(button("composer-send", this.busy ? "Sending…" : "Send", "⇧↵", true, (cx) => this.send(cx))));
   }
 }
