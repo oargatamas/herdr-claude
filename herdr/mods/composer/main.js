@@ -1,6 +1,8 @@
 // Prompt composer: a large text box for writing a long prompt to one agent session,
 // opened from the LITANY button in a pane header (props: { terminal, pane, name, overlay }) or with
 // cmd-l (mod.open: no props, so it takes the focused pane's agent session; if that is not an agent, it says so).
+// Both open it 1100 wide and 75% high: the button through openOverlay, cmd-l through mod.json's "overlay"
+// (without it mod.open sizes the dialog to its content and the text box shrinks to one line).
 //   Send   (cmd-enter):  hc send — pastes the text into the session and presses Enter.
 //   Insert (cmd-i):     puts the text into the session's prompt without sending it
 //                       (via the clipboard, which is restored afterwards).
@@ -93,7 +95,7 @@ export default class Composer extends View {
 
   render(cx) {
     const t = theme(), p = this.info;
-    if (this.refused) return v_flex().size_full().bg(t.popover).border(1).border_color(t.accent)
+    if (this.refused) return v_flex().size_full().min_w(640).bg(t.popover).border(1).border_color(t.accent)
       .on_key_down((e) => { if (e.key === "escape") this.close(); })
       .child(h_flex().h(36).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.input).text_size(12).text_color(t.accent)
         .child(svg("mods/chrome-mechanicus/square-pen.svg").size(13)).child("LITANY")
@@ -109,7 +111,7 @@ export default class Composer extends View {
       .text_color(primary ? t.accent_foreground : t.foreground).text_size(12)
       .hover((el) => el.opacity(0.85)).on_click((_e, cx) => action(cx))
       .child(label).when(Boolean(hint), (el) => el.child(div().text_size(10).opacity(0.7).child(hint)));
-    return v_flex().size_full().bg(t.popover).border(1).border_color(t.accent)
+    return v_flex().size_full().min_w(640).bg(t.popover).border(1).border_color(t.accent)
       .key_context("Composer")
       .on_action("composer::Send", (_e, cx) => this.send(cx))
       .on_action("composer::Insert", (_e, cx) => this.insert(cx))
@@ -120,7 +122,7 @@ export default class Composer extends View {
         .child(div().text_size(10.5).text_color(t.dim).child(`${lines} lines · ${text.length} chars`))
         .child(div().id("composer-close").px(6).cursor_pointer().text_color(t.dim).hover((el) => el.text_color(t.foreground))
           .on_click(() => this.close()).child(svg("mods/chrome-mechanicus/x.svg").size(13))))
-      .child(div().id("composer-box").flex_1().min_h(0).m(12).p(8).border(1).border_color(t.input).bg(t.background)
+      .child(div().id("composer-box").flex_1().min_h(240).m(12).p(8).border(1).border_color(t.input).bg(t.background)
         .text_size(13).text_color(t.foreground)
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.state.focus(); })
         .child(Textarea.new(this.state).size_full()))
